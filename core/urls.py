@@ -5,7 +5,9 @@ from .views.reports import report_admin_view
 
 urlpatterns = [
     # --- Аутентификация ---
-    path('login/', CustomTokenObtainPairView.as_view(), name='login'),
+    path('auth/login/', CustomTokenObtainPairView.as_view(), name='login'),
+    path('auth/me/', UserProfileView.as_view(), name='current_user'),
+    path('login/', CustomTokenObtainPairView.as_view(), name='login_legacy'),  # Обратная совместимость
     path('send_email_code/', SendEmailCodeView.as_view(), name='send_email_code'),
     path('register_with_code/', RegisterWithCodeView.as_view(), name='register_with_code'),
 
