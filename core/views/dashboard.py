@@ -231,25 +231,170 @@ def dashboard_analytics(request):
         {'name': 'Сб', 'value': 203},
         {'name': 'Вс', 'value': 167}
     ]
+      # Последняя активность - реальные данные
+    recent_activities = []
     
-    # Последняя активность
-    recent_activities = [
-        {
-            'id': 1,
+    # Получаем последних зарегистрированных пользователей
+    recent_users = User.objects.filter(
+        date_joined__gte=datetime.now() - timedelta(days=7)
+    ).order_by('-date_joined')[:3]
+    
+    for user in recent_users:
+        time_diff = datetime.now() - user.date_joined.replace(tzinfo=None)
+        if time_diff.days > 0:
+            time_str = f"{time_diff.days} дн. назад"
+        elif time_diff.seconds > 3600:
+            hours = time_diff.seconds // 3600
+            time_str = f"{hours} ч. назад"
+        elif time_diff.seconds > 60:
+            minutes = time_diff.seconds // 60
+            time_str = f"{minutes} мин. назад"
+        else:
+            time_str = "только что"
+            
+        recent_activities.append({
+            'id': f"user_{user.id}",
             'type': 'user_register',
-            'user': 'Новый пользователь',
+            'user': user.username,
             'action': 'зарегистрировался',
-            'time': '5 минут назад'
-        },
-        {
-            'id': 2,
-            'type': 'comment',
-            'user': 'user123',
-            'action': 'оставил комментарий',
-            'target': 'Attack on Titan',
-            'time': '15 минут назад'
-        }
-    ]
+            'time': time_str
+        })
+    
+    # Получаем последние комментарии
+    try:
+        recent_comments = Comment.objects.select_related('user').filter(
+            created_at__gte=datetime.now() - timedelta(days=7)
+        ).order_by('-created_at')[:5]
+        
+        for comment in recent_comments:
+            time_diff = datetime.now() - comment.created_at.replace(tzinfo=None)
+            if time_diff.days > 0:
+                time_str = f"{time_diff.days} дн. назад"
+            elif time_diff.seconds > 3600:
+                hours = time_diff.seconds // 3600
+                time_str = f"{hours} ч. назад"
+            elif time_diff.seconds > 60:
+                minutes = time_diff.seconds // 60
+                time_str = f"{minutes} мин. назад"
+            else:
+                time_str = "только что"
+                
+            recent_activities.append({
+                'id': f"comment_{comment.id}",
+                'type': 'comment',
+                'user': comment.user.username,
+                'action': 'оставил комментарий',
+                'target': 'к аниме',  # Можем улучшить если есть связь с аниме
+                'time': time_str
+            })
+    except:
+        # Если модель Comment не найдена, пропускаем
+        pass
+    
+    # Получаем последние новости
+    try:
+        recent_news = News.objects.select_related('author').filter(
+            created_at__gte=datetime.now() - timedelta(days=7)
+        ).order_by('-created_at')[:3]
+        
+        for news in recent_news:
+            time_diff = datetime.now() - news.created_at.replace(tzinfo=None)
+            if time_diff.days > 0:
+                time_str = f"{time_diff.days} дн. назад"
+            elif time_diff.seconds > 3600:
+                hours = time_diff.seconds // 3600
+                time_str = f"{hours} ч. назад"
+            elif time_diff.seconds > 60:
+                minutes = time_diff.seconds // 60
+                time_str = f"{minutes} мин. назад"
+            else:
+                time_str = "только что"
+                
+            recent_activities.append({
+                'id': f"news_{news.id}",
+                'type': 'news',
+                'user': news.author.username,
+                'action': 'опубликовал новость',
+                'target': news.title[:30] + '...' if len(news.title) > 30 else news.title,
+                'time': time_str
+            })
+    except:
+        # Если модель News не найдена, пропускаем
+        pass
+    
+    # Сортируем все активности по времени и берем последние 8
+    # (сортировка по времени создания)
+    all_activities = []
+    
+    # Добавляем пользователей с их временем регистрации
+    for user in recent_users:
+        all_activities.append({
+            'time_obj': user.date_joined.replace(tzinfo=None),
+            'data': {
+                'id': f"user_{user.id}",
+                'type': 'user_register',
+                'user': user.username,
+                'action': 'зарегистрировался',
+                'time': ""  # Заполним после сортировки
+            }
+        })
+    
+    # Добавляем комментарии
+    try:
+        for comment in recent_comments:
+            all_activities.append({
+                'time_obj': comment.created_at.replace(tzinfo=None),
+                'data': {
+                    'id': f"comment_{comment.id}",
+                    'type': 'comment',
+                    'user': comment.user.username,
+                    'action': 'оставил комментарий',
+                    'target': 'к аниме',
+                    'time': ""
+                }
+            })
+    except:
+        pass
+    
+    # Добавляем новости
+    try:
+        for news in recent_news:
+            all_activities.append({
+                'time_obj': news.created_at.replace(tzinfo=None),
+                'data': {
+                    'id': f"news_{news.id}",
+                    'type': 'news',
+                    'user': news.author.username,
+                    'action': 'опубликовал новость',
+                    'target': news.title[:30] + '...' if len(news.title) > 30 else news.title,
+                    'time': ""
+                }
+            })
+    except:
+        pass
+    
+    # Сортируем по времени (новые сначала) и берем последние 8
+    all_activities.sort(key=lambda x: x['time_obj'], reverse=True)
+    all_activities = all_activities[:8]
+    
+    # Форматируем время для финального списка
+    recent_activities = []
+    for activity in all_activities:
+        time_diff = datetime.now() - activity['time_obj']
+        if time_diff.days > 0:
+            time_str = f"{time_diff.days} дн. назад"
+        elif time_diff.seconds > 3600:
+            hours = time_diff.seconds // 3600
+            time_str = f"{hours} ч. назад"
+        elif time_diff.seconds > 60:
+            minutes = time_diff.seconds // 60
+            time_str = f"{minutes} мин. назад"
+        else:
+            time_str = "только что"
+        
+        activity_data = activity['data']
+        activity_data['time'] = time_str
+        recent_activities.append(activity_data)
     
     return Response({
         'data': {
