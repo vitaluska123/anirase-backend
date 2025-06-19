@@ -400,3 +400,123 @@ def dashboard_activity_full(request):
             'available_types': list(type_counts.keys())
         }
     })
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def dashboard_user_edit(request, user_id):
+    """
+    Редактирование пользователя
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Пользователь не найден'}, status=404)
+    
+    # Проверяем, что нельзя редактировать суперпользователя, если сам не суперпользователь
+    if user.is_superuser and not request.user.is_superuser:
+        return Response({'error': 'Недостаточно прав для редактирования этого пользователя'}, status=403)
+    
+    # Получаем данные для обновления
+    username = request.data.get('username')
+    email = request.data.get('email')
+    is_active = request.data.get('is_active')
+    is_staff = request.data.get('is_staff')
+    
+    # Проверяем уникальность username и email (если они изменились)
+    if username and username != user.username:
+        if User.objects.filter(username=username).exists():
+            return Response({'error': 'Пользователь с таким именем уже существует'}, status=400)
+        user.username = username
+    
+    if email and email != user.email:
+        if User.objects.filter(email=email).exists():
+            return Response({'error': 'Пользователь с таким email уже существует'}, status=400)
+        user.email = email
+    
+    # Обновляем статусы (только если пользователь не изменяет сам себя)
+    if is_active is not None and user.id != request.user.id:
+        user.is_active = is_active
+    
+    if is_staff is not None and request.user.is_superuser and user.id != request.user.id:
+        user.is_staff = is_staff
+    
+    user.save()
+    
+    return Response({
+        'message': 'Пользователь успешно обновлен',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'is_active': user.is_active,
+            'is_staff': user.is_staff,
+            'date_joined': user.date_joined.isoformat(),
+            'last_login': user.last_login.isoformat() if user.last_login else None
+        }
+    })
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def dashboard_user_toggle_active(request, user_id):
+    """
+    Блокировка/разблокировка пользователя
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Пользователь не найден'}, status=404)
+    
+    # Проверяем, что нельзя блокировать суперпользователя или самого себя
+    if user.is_superuser:
+        return Response({'error': 'Нельзя блокировать суперпользователя'}, status=403)
+    
+    if user.id == request.user.id:
+        return Response({'error': 'Нельзя блокировать самого себя'}, status=403)
+    
+    # Переключаем статус активности
+    user.is_active = not user.is_active
+    user.save()
+    
+    action = 'разблокирован' if user.is_active else 'заблокирован'
+    
+    return Response({
+        'message': f'Пользователь {action}',
+        'is_active': user.is_active
+    })
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def dashboard_user_delete(request, user_id):
+    """
+    Удаление пользователя
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Пользователь не найден'}, status=404)
+    
+    # Проверяем, что нельзя удалить суперпользователя или самого себя
+    if user.is_superuser:
+        return Response({'error': 'Нельзя удалить суперпользователя'}, status=403)
+    
+    if user.id == request.user.id:
+        return Response({'error': 'Нельзя удалить самого себя'}, status=403)
+    
+    username = user.username
+    user.delete()
+    
+    return Response({
+        'message': f'Пользователь {username} успешно удален'
+    })
