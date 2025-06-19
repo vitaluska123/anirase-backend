@@ -114,17 +114,27 @@ def get_recent_activities(limit=8):
             })
     except:
         # Если модель News не найдена, пропускаем
-        pass
-    
-    # Сортируем по времени (новые сначала) и берем нужное количество
+        pass    # Сортируем по времени (новые сначала) и берем нужное количество
     all_activities.sort(key=lambda x: x['time_obj'], reverse=True)
     all_activities = all_activities[:limit]
     
-    # Форматируем время для финального списка
+    # Возвращаем время как timestamp для обработки на клиенте
     recent_activities = []
     for activity in all_activities:
         activity_data = activity['data']
-        activity_data['time'] = format_time_ago(activity['time_obj'])
+        # Конвертируем время в timestamp (миллисекунды)
+        time_obj = activity['time_obj']
+        
+        # Делаем время timezone-aware если оно naive
+        if timezone.is_naive(time_obj):
+            time_obj = timezone.make_aware(time_obj)
+        
+        activity_data['timestamp'] = int(time_obj.timestamp() * 1000)
+        
+        # Убираем старое поле time, заменяем на timestamp
+        if 'time' in activity_data:
+            del activity_data['time']
+            
         recent_activities.append(activity_data)
     
     return recent_activities
@@ -177,13 +187,12 @@ def dashboard_stats(request):
         total_comments = Comment.objects.count()
     except:
         total_comments = 0
-    
-    # Статистика за последние 30 дней
-    thirty_days_ago = datetime.now() - timedelta(days=30)
+      # Статистика за последние 30 дней
+    thirty_days_ago = timezone.now() - timedelta(days=30)
     new_users_month = User.objects.filter(date_joined__gte=thirty_days_ago).count()
     
     # Активные пользователи (заходили за последние 7 дней)
-    week_ago = datetime.now() - timedelta(days=7)
+    week_ago = timezone.now() - timedelta(days=7)
     active_users = User.objects.filter(last_login__gte=week_ago).count()
     
     return Response({
@@ -255,11 +264,10 @@ def dashboard_content(request):
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
         return Response(error, status=status.HTTP_403_FORBIDDEN)
-    
-    # Статистика новостей
+      # Статистика новостей
     try:
         news_count = News.objects.count()
-        published_news = News.objects.filter(created_at__gte=datetime.now() - timedelta(days=30)).count()
+        published_news = News.objects.filter(created_at__gte=timezone.now() - timedelta(days=30)).count()
     except:
         news_count = 0
         published_news = 0
@@ -267,7 +275,7 @@ def dashboard_content(request):
     # Статистика комментариев
     try:
         comments_count = Comment.objects.count()
-        recent_comments = Comment.objects.filter(created_at__gte=datetime.now() - timedelta(days=7)).count()
+        recent_comments = Comment.objects.filter(created_at__gte=timezone.now() - timedelta(days=7)).count()
     except:
         comments_count = 0
         recent_comments = 0
@@ -319,11 +327,10 @@ def dashboard_analytics(request):
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
         return Response(error, status=status.HTTP_403_FORBIDDEN)
-    
-    # Данные для графиков активности пользователей за последние 30 дней
+      # Данные для графиков активности пользователей за последние 30 дней
     user_activity = []
     for i in range(30):
-        date = datetime.now() - timedelta(days=29-i)
+        date = timezone.now() - timedelta(days=29-i)
         day_users = User.objects.filter(date_joined__date=date.date()).count()
         user_activity.append({
             'name': date.strftime('%d.%m'),
