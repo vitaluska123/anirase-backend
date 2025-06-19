@@ -217,10 +217,11 @@ def dashboard_users(request):
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
         return Response(error, status=status.HTTP_403_FORBIDDEN)
-    
     page = int(request.GET.get('page', 1))
     limit = int(request.GET.get('limit', 20))
     search = request.GET.get('search', '')
+    is_active = request.GET.get('is_active')
+    is_staff = request.GET.get('is_staff')
     
     users_query = User.objects.all()
     
@@ -230,17 +231,30 @@ def dashboard_users(request):
             Q(email__icontains=search)
         )
     
+    # Фильтр по статусу активности
+    if is_active is not None:
+        if is_active.lower() == 'true':
+            users_query = users_query.filter(is_active=True)
+        elif is_active.lower() == 'false':
+            users_query = users_query.filter(is_active=False)
+    
+    # Фильтр по роли (staff)
+    if is_staff is not None:
+        if is_staff.lower() == 'true':
+            users_query = users_query.filter(is_staff=True)
+        elif is_staff.lower() == 'false':
+            users_query = users_query.filter(is_staff=False)
     total = users_query.count()
-    users = users_query[(page-1)*limit:page*limit]
+    users = users_query.order_by('-date_joined')[(page-1)*limit:page*limit]
     
     users_data = []
-    for user in users:
-        users_data.append({
+    for user in users:        users_data.append({
             'id': user.id,
             'username': user.username,
             'email': user.email,
             'is_active': user.is_active,
             'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
             'date_joined': user.date_joined.isoformat(),
             'last_login': user.last_login.isoformat() if user.last_login else None
         })
