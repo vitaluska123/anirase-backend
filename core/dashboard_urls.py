@@ -1,0 +1,21 @@
+# dashboard/urls.py
+from django.urls import path
+from .views.dashboard import *
+
+dashboard_urlpatterns = [
+    # Аутентификация для dashboard
+    path('dashboard/login/', dashboard_login, name='dashboard_login'),
+    
+    # Основные данные dashboard
+    path('dashboard/stats/', dashboard_stats, name='dashboard_stats'),
+    path('dashboard/analytics/', dashboard_analytics, name='dashboard_analytics'),
+    
+    # Управление пользователями
+    path('dashboard/users/', dashboard_users, name='dashboard_users'),
+    
+    # Управление контентом
+    path('dashboard/content/', dashboard_content, name='dashboard_content'),
+    
+    # Управление магазином
+    path('dashboard/shop/', dashboard_shop, name='dashboard_shop'),
+]

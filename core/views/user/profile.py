@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from core.models import UserProfile, Bookmark, History
 from core.serializers import UserProfileSerializer, BookmarkSerializer, HistorySerializer
+from django.contrib.auth.models import User
 
 class UserProfileView(APIView):
     def get(self, request):
@@ -31,13 +32,14 @@ class UserProfileView(APIView):
         bookmarks = Bookmark.objects.filter(user=user)
         bookmarks_by_status = {'watching': [], 'planned': [], 'completed': []}
         for bm in bookmarks:
-            bookmarks_by_status[bm.status].append(BookmarkSerializer(bm).data)
-        history = History.objects.filter(user=user).order_by('-watched_at')[:30]
+            bookmarks_by_status[bm.status].append(BookmarkSerializer(bm).data)        
+            history = History.objects.filter(user=user).order_by('-watched_at')[:30]
         history_data = HistorySerializer(history, many=True).data
         return Response({
             'id': user.id,
             'username': user.username,
             'email': user.email,
+            'is_staff': user.is_staff,
             'avatar_url': profile_data['avatar_url'],
             'group': profile_data['group'],
             'group_color': profile_data['group_color'],

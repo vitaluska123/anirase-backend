@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import *
 from .views.reports import report_admin_view
+from .dashboard_urls import dashboard_urlpatterns
 
 urlpatterns = [
     # --- Аутентификация ---
@@ -44,10 +45,11 @@ urlpatterns = [
     
     # --- Редиректы после платежа (GET запросы от RoboKassa) ---
     path('shop/payment-success-redirect/', PaymentSuccessRedirectView.as_view(), name='shop_payment_success_redirect'),
-    path('shop/payment-fail-redirect/', PaymentFailRedirectView.as_view(), name='shop_payment_fail_redirect'),
-
-    # --- Генерация изображений для аниме ---
+    path('shop/payment-fail-redirect/', PaymentFailRedirectView.as_view(), name='shop_payment_fail_redirect'),    # --- Генерация изображений для аниме ---
     path('generate/<int:idanime>/', AnimeImageGenerateView.as_view(), name='anime_image_generate'),
     path('watchroom/create/', WatchRoomCreateView.as_view(), name='watchroom_create'),
     path('watchroom/public/', PublicWatchRoomsView.as_view(), name='public_watch_rooms'),
 ]
+
+# Добавляем dashboard URLs
+urlpatterns += dashboard_urlpatterns
