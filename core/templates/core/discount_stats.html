@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block title %}Статистика скидок{% endblock %}
+
+{% block content %}
+<h1>Статистика активаций скидок</h1>
+<canvas id="discountChart" width="800" height="400"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const chartData = JSON.parse('{{ chart_data|escapejs }}');
+    const ctx = document.getElementById('discountChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                label: 'Активации скидок по дням',
+                data: chartData.data,
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: true },
+                title: { display: false }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Дата' } },
+                y: { title: { display: true, text: 'Количество' }, beginAtZero: true }
+            }
+        }
+    });
+</script>
+{% endblock %}

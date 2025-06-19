@@ -1,0 +1,38 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy-backend:
+    name: Deploy Backend to Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # Setup SSH
+      - name: Install SSH keys
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SSH_HOST_1 }} >> ~/.ssh/known_hosts
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST_1 }} "ssh-keyscan -H ${{ secrets.SSH_HOST_2 }}" >> ~/.ssh/known_hosts
+      
+      # Deploy Backend (excluding media)
+      - name: Install rsync
+        run: sudo apt-get update && sudo apt-get install -y rsync
+
+      - name: Deploy backend to server (excluding media)
+        run: |
+          rsync -avz --exclude 'media' -e "ssh -o ProxyJump=${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST_1 }} -i ~/.ssh/id_rsa" ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST_2 }}:/var/www/html/anirase-backend-v2
+
+      - name: Restart backend service
+        run: |
+          ssh -o ProxyJump=${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST_1 }} -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST_2 }} "sudo systemctl restart anirase-backend.service"
+
+      - name: Cleanup
+        run: rm -rf ~/.ssh

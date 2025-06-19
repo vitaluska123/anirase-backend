@@ -1,0 +1,77 @@
+{% extends 'admin/base_site.html' %}
+{% load static %}
+{% block title %}Отчёты и графики{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 1200px; margin: 0 auto;">
+  <div class="card-body">
+    <h1 class="card-title" style="font-size:2rem;">Отчёты и графики</h1>
+    <form method="get" class="form-inline" style="margin-bottom: 24px;">
+        <label style="font-weight:600;">Выберите таблицу:
+            <select name="model" class="form-control" style="margin-left:8px;min-width:200px;" onchange="this.form.submit()">
+                <option value="">-- Не выбрано --</option>
+                {% for name in model_names %}
+                    <option value="{{ name }}" {% if name == selected_model %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+    </form>
+    {% if selected_model and data %}
+        <h2 style="font-size:1.3rem;">График по таблице: {{ selected_model }}</h2>
+        <div style="background:#23272b;padding:16px;border-radius:8px;">
+            <canvas id="mainChart" height="80"></canvas>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+            const data = {{ data|safe }};
+            const fields = {{ fields|safe }};
+            // Для отладки:
+            // console.log('data', data); console.log('fields', fields);
+            let labels = [];
+            let values = [];
+            if (fields.includes('created_at')) {
+                const grouped = {};
+                data.forEach(row => {
+                    const date = row.created_at ? row.created_at.slice(0, 10) : 'нет даты';
+                    grouped[date] = (grouped[date] || 0) + 1;
+                });
+                labels = Object.keys(grouped);
+                values = Object.values(grouped);
+            } else if (fields.includes('id')) {
+                labels = data.map(row => row.id);
+                values = data.map(_ => 1);
+            } else {
+                labels = data.map((_, i) => i+1);
+                values = data.map(_ => 1);
+            }
+            if (labels.length === 0) labels = ['Нет данных'];
+            if (values.length === 0) values = [0];
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Количество записей',
+                        data: values,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } }
+                }
+            });
+        </script>
+    {% elif selected_model %}
+        <div class="alert alert-warning">Нет данных для отображения.</div>
+    {% endif %}
+    {% if not selected_model %}
+        <div class="alert alert-info">Выберите таблицу для построения графика.</div>
+    {% endif %}
+    <details style="margin-top:24px;">
+      <summary style="cursor:pointer;">Отладка (данные):</summary>
+      <pre style="max-height:200px;overflow:auto;font-size:12px;">{{ data|safe }}</pre>
+    </details>
+  </div>
+</div>
+{% endblock %}

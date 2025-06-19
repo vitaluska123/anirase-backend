@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Почтовая панель</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/AniRase.webp">
+    <style>
+        body {
+            background: #181c20;
+            color: #fff;
+            font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+        }
+        .mail-header {
+            background: #23272b;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 32px 18px 32px;
+            box-shadow: 0 2px 12px #0002;
+            border-bottom: 1px solid #22252a;
+        }
+        .mail-header-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5em;
+        }
+        .mail-header-title {
+            font-size: 1.45em;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .mail-header select {
+            font-size: 1.08em;
+            border-radius: 8px;
+            padding: 7px 16px;
+            background: #181c20;
+            color: #fff;
+            border: 1px solid #333;
+        }
+        .mail-header .admin-link {
+            background: #1e90ff;
+            color: #fff;
+            border-radius: 8px;
+            padding: 8px 22px;
+            font-size: 1.08em;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.18s;
+            border: none;
+            margin-left: 1.5em;
+            box-shadow: 0 2px 8px #0002;
+        }
+        .mail-header .admin-link:hover {
+            background: #0056b3;
+        }
+        .mail-top-bar {
+            margin: 2em auto 0.5em auto;
+            display: flex;
+            align-items: center;
+            gap: 1em;
+            max-width: 900px;
+            justify-content: flex-start;
+        }
+        .mail-table-wrapper {
+            max-width: 900px;
+            margin: 0 auto 2em auto;
+            background: #23272b;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px #0002;
+            padding: 0.5em 1em 1em 1em;
+        }
+        .mail-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 1em;
+        }
+        .mail-table th, .mail-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #333;
+        }
+        .mail-table th {
+            background: #22252a;
+            font-size: 1.08em;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+        }
+        .mail-table tr.selected {
+            background: #2a3b4d;
+            font-weight: bold;
+        }
+        .mail-table tr:hover {
+            background: #223040;
+            cursor: pointer;
+        }
+        .mail-table tr:last-child td {
+            border-bottom: none;
+        }
+        .modal-bg {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-bg.active { display: flex; }
+        .modal {
+            background: #23272b;
+            border-radius: 16px;
+            color: #fff;
+            position: relative;
+            animation: modalIn 0.18s;
+            box-shadow: 0 8px 48px #000a;
+        }
+        .modal--large {
+            padding: 48px 56px 32px 56px;
+            min-width: 600px;
+            max-width: 1100px;
+            width: 98vw;
+        }
+        @keyframes modalIn { from { transform: translateY(-40px); opacity: 0; } to { transform: none; opacity: 1; } }
+        .modal-close {
+            position: absolute;
+            top: 12px; right: 18px;
+            font-size: 1.7em;
+            color: #aaa;
+            cursor: pointer;
+            transition: color 0.2s;
+            z-index: 2;
+        }
+        .modal-close:hover { color: #fff; }
+        .modal .btn {
+            margin-top: 1em;
+        }
+        .mail-letter-body {
+            background: #181c20;
+            border-radius: 8px;
+            padding: 18px 22px;
+            margin: 1.2em 0 1.6em 0;
+            color: #e0e0e0;
+            font-size: 1.13em;
+            max-height: 600px;
+            min-height: 220px;
+            overflow-y: auto;
+            white-space: pre-line;
+        }
+        .mail-letter-body b { color: #fff; }
+        .reply-form {
+            margin-top: 1em;
+        }
+        .reply-form textarea {
+            width: 100%;
+            min-height: 120px;
+            font-size: 1.04em;
+            border-radius: 8px;
+            border: 1px solid #444;
+            padding: 10px;
+            background: #181c20;
+            color: #fff;
+            resize: vertical;
+            margin-bottom: 1em;
+        }
+        .reply-form .reply-row {
+            display: flex;
+            align-items: center;
+            gap: 1em;
+            margin-top: 0.7em;
+        }
+        .reply-form select {
+            min-width: 180px;
+            font-size: 1em;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #23272b;
+            color: #fff;
+            padding: 6px 10px;
+        }
+        .btn, button[type="submit"] {
+            background: #1e90ff;
+            color: #fff;
+            border-radius: 8px;
+            padding: 10px 28px;
+            font-size: 1.1em;
+            border: none;
+            transition: background 0.2s;
+            box-shadow: 0 2px 8px #0002;
+            cursor: pointer;
+        }
+        .btn:hover, button[type="submit"]:hover {
+            background: #0056b3;
+        }
+        input[type="email"], input[type="text"] {
+            background: #181c20;
+            color: #fff;
+            border-radius: 8px;
+            border: 1px solid #444;
+            padding: 10px 14px;
+            font-size: 1.04em;
+            margin-bottom: 0.5em;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border 0.18s;
+        }
+        input[type="email"]:focus, input[type="text"]:focus {
+            border: 1.5px solid #1e90ff;
+            outline: none;
+        }
+        @media (max-width: 1200px) {
+            .modal--large { min-width: 340px; max-width: 98vw; padding: 18px 6vw 18px 6vw; }
+        }
+        @media (max-width: 900px) {
+            .modal--large { padding: 10px 5px; }
+            .mail-table th, .mail-table td { font-size: 0.92em; }
+            .mail-table-wrapper { padding: 0.5em 0.2em 1em 0.2em; }
+        }
+        @media (max-width: 700px) {
+            .modal--large { min-width: 0; max-width: 100vw; padding: 8px 2vw 8px 2vw; }
+        }
+    </style>
+</head>
+<body>
+    <div class="mail-header">
+        <div class="mail-header-left">
+            <span class="mail-header-title">Почтовая панель</span>
+            <form method="get" style="margin-bottom:0; display:flex; gap:1em; align-items:center;">
+                <select name="account" id="account" onchange="this.form.submit()">
+                    {% for acc in accounts %}
+                        <option value="{{ acc.id }}" {% if acc.id == selected_account_id %}selected{% endif %}>{{ acc.name }} ({{ acc.email }})</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <button class="btn" id="newMailBtn" style="margin-left:1.5em;background:#28a745; color:#fff; border-radius:8px;">Новое письмо</button>
+        </div>
+        <a href="/admin/" class="admin-link">В админку</a>
+    </div>
+    <div class="mail-top-bar">
+    </div>
+    <div class="mail-table-wrapper">
+        <table class="mail-table">
+            <thead>
+                <tr>
+                    <th>Отправитель</th>
+                    <th>Тема</th>
+                    <th>Дата</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mail in emails %}
+                <tr data-uid="{{ mail.uid }}" class="mail-row" style="{% if selected_mail and mail.uid == selected_mail.uid %}font-weight:bold;{% endif %}{% if mail.color %} border-left: 8px solid {{ mail.color }};{% endif %}">
+                    <td>{{ mail.from }}</td>
+                    <td>{{ mail.subject }}</td>
+                    <td style="white-space:nowrap;">{{ mail.date|slice:':22' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <!-- Сериализуем emails как JSON для JS -->
+    <script id="emails-data" type="application/json">{{ emails|safe|json_script:"emails-data" }}</script>
+    <!-- Модальное окно письма -->
+    <div id="mailModalBg" class="modal-bg">
+        <div class="modal modal--large" id="mailModal">
+            <span class="modal-close" onclick="closeMailModal()">&times;</span>
+            <div id="mailModalContent"></div>
+            <button class="btn" id="replyBtn" style="background:#1e90ff; color:#fff; border-radius:8px;">Ответить</button>
+        </div>
+    </div>
+    <!-- Модальное окно ответа -->
+    <div id="replyModalBg" class="modal-bg">
+        <div class="modal modal--large" id="replyModal">
+            <span class="modal-close" onclick="closeReplyModal()">&times;</span>
+            <form method="post" class="reply-form" id="replyForm">
+                {% csrf_token %}
+                <div id="replyMailInfo" style="margin-bottom:0.7em;"></div>
+                <textarea name="reply_body" id="replyBody"></textarea>
+                <div class="reply-row">
+                    <label for="template" style="margin-bottom:0;">Шаблон:</label>
+                    <select name="template" id="templateSelect">
+                        <option value="">-- Без шаблона --</option>
+                        {% for tpl in templates %}
+                            <option value="{{ tpl }}">{{ tpl|truncatechars:40 }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">Отправить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Модальное окно нового письма -->
+    <div id="newMailModalBg" class="modal-bg">
+        <div class="modal modal--large" id="newMailModal">
+            <span class="modal-close" onclick="closeNewMailModal()">&times;</span>
+            <form method="post" class="reply-form" id="newMailForm">
+                {% csrf_token %}
+                <div class="reply-row">
+                    <label for="newMailTo">Кому:</label>
+                    <input type="email" name="to" id="newMailTo" required style="min-width:220px;">
+                </div>
+                <div class="reply-row">
+                    <label for="newMailSubject">Тема:</label>
+                    <input type="text" name="subject" id="newMailSubject" required style="min-width:220px;">
+                </div>
+                <textarea name="body" id="newMailBody" placeholder="Текст письма" required></textarea>
+                <div class="reply-row">
+                    <label for="newMailTemplate" style="margin-bottom:0;">Шаблон:</label>
+                    <select name="template" id="newMailTemplate">
+                        <option value="">-- Без шаблона --</option>
+                        {% for tpl in templates %}
+                            <option value="{{ tpl }}">{{ tpl|truncatechars:40 }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">Отправить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+    const emails = {{ emails|safe|default:'[]' }};
+    console.log('Loaded emails:', emails); // DEBUG: Проверяем, что письма реально есть
+    if (!Array.isArray(emails) || emails.length === 0) {
+        document.querySelector('.mail-table tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;font-size:1.1em;">Писем не найдено</td></tr>';
+    }
+    const selectedAccountId = {{ selected_account_id|default:'null' }};
+    const csrfToken = '{{ csrf_token }}';
+    const mailModalBg = document.getElementById('mailModalBg');
+    const mailModalContent = document.getElementById('mailModalContent');
+    const replyModalBg = document.getElementById('replyModalBg');
+    const replyMailInfo = document.getElementById('replyMailInfo');
+    const replyBody = document.getElementById('replyBody');
+    const templateSelect = document.getElementById('templateSelect');
+    // Новый функционал: отправка нового письма
+    const newMailBtn = document.getElementById('newMailBtn');
+    const newMailModalBg = document.getElementById('newMailModalBg');
+    const newMailForm = document.getElementById('newMailForm');
+    const newMailTemplate = document.getElementById('newMailTemplate');
+    const newMailBody = document.getElementById('newMailBody');
+    let currentMail = null;
+
+    function openMailModal(uid) {
+        const mail = emails.find(m => m.uid == uid);
+        if (!mail) return;
+        currentMail = mail;
+        mailModalContent.innerHTML = `
+            <div style='font-size:1.13em; font-weight:600; margin-bottom:0.5em;'>${mail.subject}</div>
+            <div style='color:#8ecfff; margin-bottom:0.3em;'><b>От:</b> ${mail.from}</div>
+            <div class='mail-letter-body'>${mail.body.replace(/\n/g, '<br>')}</div>
+        `;
+        mailModalBg.classList.add('active');
+        document.getElementById('replyBtn').onclick = openReplyModal;
+    }
+    function closeMailModal() {
+        mailModalBg.classList.remove('active');
+    }
+    function openReplyModal() {
+        closeMailModal();
+        if (!currentMail) return;
+        replyMailInfo.innerHTML = `
+            <div style='font-size:1.08em;'><b>Тема:</b> ${currentMail.subject}</div>
+            <div style='color:#8ecfff;'><b>От:</b> ${currentMail.from}</div>
+        `;
+        replyBody.value = '\n\n---\n' + (currentMail.body ? currentMail.body.slice(0, 200) : '');
+        replyModalBg.classList.add('active');
+    }
+    function closeReplyModal() {
+        replyModalBg.classList.remove('active');
+    }
+    function openNewMailModal() {
+        newMailForm.reset();
+        newMailModalBg.classList.add('active');
+    }
+    function closeNewMailModal() {
+        newMailModalBg.classList.remove('active');
+    }
+    if (templateSelect) {
+        templateSelect.addEventListener('change', function() {
+            if (this.value) {
+                replyBody.value = this.value + '\n\n' + replyBody.value.replace(/^.*?---/s, '---');
+            }
+        });
+    }
+    if (newMailBtn) newMailBtn.onclick = openNewMailModal;
+    if (newMailTemplate) {
+        newMailTemplate.addEventListener('change', function() {
+            if (this.value) {
+                newMailBody.value = this.value + '\n\n';
+            }
+        });
+    }
+    Array.from(document.getElementsByClassName('mail-row')).forEach(row => {
+        row.onclick = function(e) {
+            // Не реагировать на клики по выпадающему селектору цвета
+            if (e.target.classList.contains('color-select') || e.target.closest('.color-select')) return;
+            // Не реагировать на клики по вложенным кнопкам (если появятся)
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+            try {
+                openMailModal(this.dataset.uid);
+            } catch (e) {
+                alert('Ошибка при открытии письма: ' + e);
+                console.error(e);
+            }
+        };
+    });
+    const replyForm = document.getElementById('replyForm');
+    if (replyForm) {
+        replyForm.onsubmit = function(e) {
+            e.preventDefault();
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `?account=${selectedAccountId}&mail_id=${currentMail.uid}`;
+            const csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = 'csrfmiddlewaretoken';
+            csrf.value = csrfToken;
+            form.appendChild(csrf);
+            const replyBodyInput = document.createElement('textarea');
+            replyBodyInput.name = 'reply_body';
+            replyBodyInput.value = replyBody.value;
+            form.appendChild(replyBodyInput);
+            const templateInput = document.createElement('input');
+            templateInput.type = 'hidden';
+            templateInput.name = 'template';
+            templateInput.value = templateSelect.value;
+            form.appendChild(templateInput);
+            document.body.appendChild(form);
+            form.submit();
+        };
+    }
+    if (newMailForm) {
+        newMailForm.onsubmit = function(e) {
+            e.preventDefault();
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `?account=${selectedAccountId}&new_mail=1`;
+            const csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = 'csrfmiddlewaretoken';
+            csrf.value = csrfToken;
+            form.appendChild(csrf);
+            ['to','subject','body','template'].forEach(id => {
+                const el = document.getElementById('newMail'+id.charAt(0).toUpperCase()+id.slice(1));
+                if (el) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = id;
+                    input.value = el.value;
+                    form.appendChild(input);
+                }
+            });
+            document.body.appendChild(form);
+            form.submit();
+        };
+    }
+    [mailModalBg, replyModalBg, newMailModalBg].forEach(bg => {
+        bg.addEventListener('click', function(e) {
+            if (e.target === bg) bg.classList.remove('active');
+        });
+    });
+    </script>
+</body>
+</html>
