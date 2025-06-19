@@ -9,6 +9,7 @@ dashboard_urlpatterns = [
     # Основные данные dashboard
     path('dashboard/stats/', dashboard_stats, name='dashboard_stats'),
     path('dashboard/analytics/', dashboard_analytics, name='dashboard_analytics'),
+    path('dashboard/activity/', dashboard_activity_full, name='dashboard_activity_full'),
     
     # Управление пользователями
     path('dashboard/users/', dashboard_users, name='dashboard_users'),

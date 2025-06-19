@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.models import User
 from django.db.models import Count, Q
 from datetime import datetime, timedelta
+from django.utils import timezone
 from core.models import *
 
 def check_staff_permission(user):
@@ -19,6 +20,114 @@ def check_staff_permission(user):
         return False, {'error': 'Access denied', 'message': 'Доступ к панели администратора разрешен только для сотрудников'}
     
     return True, None
+
+def format_time_ago(target_time):
+    """
+    Форматирует время в понятный формат "X минут назад"
+    """
+    if target_time.tzinfo is not None:
+        now = timezone.now()
+        time_diff = now - target_time
+    else:
+        now = datetime.now()
+        time_diff = now - target_time
+    
+    total_seconds = int(time_diff.total_seconds())
+    
+    if total_seconds < 60:
+        return "только что"
+    elif total_seconds < 3600:  # меньше часа
+        minutes = total_seconds // 60
+        return f"{minutes} мин. назад"
+    elif total_seconds < 86400:  # меньше дня
+        hours = total_seconds // 3600
+        return f"{hours} ч. назад"
+    elif total_seconds < 2592000:  # меньше месяца (30 дней)
+        days = total_seconds // 86400
+        return f"{days} дн. назад"
+    else:  # больше месяца
+        months = total_seconds // 2592000
+        return f"{months} мес. назад"
+
+def get_recent_activities(limit=8):
+    """
+    Получает последнюю активность пользователей
+    """
+    all_activities = []
+    
+    # Получаем последних зарегистрированных пользователей
+    recent_users = User.objects.filter(
+        date_joined__gte=timezone.now() - timedelta(days=30)
+    ).order_by('-date_joined')[:50]
+    
+    for user in recent_users:
+        all_activities.append({
+            'time_obj': user.date_joined,
+            'data': {
+                'id': f"user_{user.id}",
+                'type': 'user_register',
+                'user': user.username,
+                'action': 'зарегистрировался',
+                'time': ""  # Заполним после сортировки
+            }
+        })
+    
+    # Получаем последние комментарии
+    try:
+        recent_comments = Comment.objects.select_related('user').filter(
+            created_at__gte=timezone.now() - timedelta(days=30)
+        ).order_by('-created_at')[:50]
+        
+        for comment in recent_comments:
+            all_activities.append({
+                'time_obj': comment.created_at,
+                'data': {
+                    'id': f"comment_{comment.id}",
+                    'type': 'comment',
+                    'user': comment.user.username,
+                    'action': 'оставил комментарий',
+                    'target': 'к аниме',  # Можем улучшить если есть связь с аниме
+                    'time': ""
+                }
+            })
+    except:
+        # Если модель Comment не найдена, пропускаем
+        pass
+    
+    # Получаем последние новости
+    try:
+        recent_news = News.objects.select_related('author').filter(
+            created_at__gte=timezone.now() - timedelta(days=30)
+        ).order_by('-created_at')[:50]
+        
+        for news in recent_news:
+            all_activities.append({
+                'time_obj': news.created_at,
+                'data': {
+                    'id': f"news_{news.id}",
+                    'type': 'news',
+                    'user': news.author.username,
+                    'action': 'опубликовал новость',
+                    'target': news.title[:30] + '...' if len(news.title) > 30 else news.title,
+                    'time': ""
+                }
+            })
+    except:
+        # Если модель News не найдена, пропускаем
+        pass
+    
+    # Сортируем по времени (новые сначала) и берем нужное количество
+    all_activities.sort(key=lambda x: x['time_obj'], reverse=True)
+    all_activities = all_activities[:limit]
+    
+    # Форматируем время для финального списка
+    recent_activities = []
+    for activity in all_activities:
+        activity_data = activity['data']
+        activity_data['time'] = format_time_ago(activity['time_obj'])
+        recent_activities.append(activity_data)
+    
+    return recent_activities
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -231,175 +340,56 @@ def dashboard_analytics(request):
         {'name': 'Сб', 'value': 203},
         {'name': 'Вс', 'value': 167}
     ]
-      # Последняя активность - реальные данные
-    recent_activities = []
     
-    # Получаем последних зарегистрированных пользователей
-    recent_users = User.objects.filter(
-        date_joined__gte=datetime.now() - timedelta(days=7)
-    ).order_by('-date_joined')[:3]
-    
-    for user in recent_users:
-        time_diff = datetime.now() - user.date_joined.replace(tzinfo=None)
-        if time_diff.days > 0:
-            time_str = f"{time_diff.days} дн. назад"
-        elif time_diff.seconds > 3600:
-            hours = time_diff.seconds // 3600
-            time_str = f"{hours} ч. назад"
-        elif time_diff.seconds > 60:
-            minutes = time_diff.seconds // 60
-            time_str = f"{minutes} мин. назад"
-        else:
-            time_str = "только что"
-            
-        recent_activities.append({
-            'id': f"user_{user.id}",
-            'type': 'user_register',
-            'user': user.username,
-            'action': 'зарегистрировался',
-            'time': time_str
-        })
-    
-    # Получаем последние комментарии
-    try:
-        recent_comments = Comment.objects.select_related('user').filter(
-            created_at__gte=datetime.now() - timedelta(days=7)
-        ).order_by('-created_at')[:5]
-        
-        for comment in recent_comments:
-            time_diff = datetime.now() - comment.created_at.replace(tzinfo=None)
-            if time_diff.days > 0:
-                time_str = f"{time_diff.days} дн. назад"
-            elif time_diff.seconds > 3600:
-                hours = time_diff.seconds // 3600
-                time_str = f"{hours} ч. назад"
-            elif time_diff.seconds > 60:
-                minutes = time_diff.seconds // 60
-                time_str = f"{minutes} мин. назад"
-            else:
-                time_str = "только что"
-                
-            recent_activities.append({
-                'id': f"comment_{comment.id}",
-                'type': 'comment',
-                'user': comment.user.username,
-                'action': 'оставил комментарий',
-                'target': 'к аниме',  # Можем улучшить если есть связь с аниме
-                'time': time_str
-            })
-    except:
-        # Если модель Comment не найдена, пропускаем
-        pass
-    
-    # Получаем последние новости
-    try:
-        recent_news = News.objects.select_related('author').filter(
-            created_at__gte=datetime.now() - timedelta(days=7)
-        ).order_by('-created_at')[:3]
-        
-        for news in recent_news:
-            time_diff = datetime.now() - news.created_at.replace(tzinfo=None)
-            if time_diff.days > 0:
-                time_str = f"{time_diff.days} дн. назад"
-            elif time_diff.seconds > 3600:
-                hours = time_diff.seconds // 3600
-                time_str = f"{hours} ч. назад"
-            elif time_diff.seconds > 60:
-                minutes = time_diff.seconds // 60
-                time_str = f"{minutes} мин. назад"
-            else:
-                time_str = "только что"
-                
-            recent_activities.append({
-                'id': f"news_{news.id}",
-                'type': 'news',
-                'user': news.author.username,
-                'action': 'опубликовал новость',
-                'target': news.title[:30] + '...' if len(news.title) > 30 else news.title,
-                'time': time_str
-            })
-    except:
-        # Если модель News не найдена, пропускаем
-        pass
-    
-    # Сортируем все активности по времени и берем последние 8
-    # (сортировка по времени создания)
-    all_activities = []
-    
-    # Добавляем пользователей с их временем регистрации
-    for user in recent_users:
-        all_activities.append({
-            'time_obj': user.date_joined.replace(tzinfo=None),
-            'data': {
-                'id': f"user_{user.id}",
-                'type': 'user_register',
-                'user': user.username,
-                'action': 'зарегистрировался',
-                'time': ""  # Заполним после сортировки
-            }
-        })
-    
-    # Добавляем комментарии
-    try:
-        for comment in recent_comments:
-            all_activities.append({
-                'time_obj': comment.created_at.replace(tzinfo=None),
-                'data': {
-                    'id': f"comment_{comment.id}",
-                    'type': 'comment',
-                    'user': comment.user.username,
-                    'action': 'оставил комментарий',
-                    'target': 'к аниме',
-                    'time': ""
-                }
-            })
-    except:
-        pass
-    
-    # Добавляем новости
-    try:
-        for news in recent_news:
-            all_activities.append({
-                'time_obj': news.created_at.replace(tzinfo=None),
-                'data': {
-                    'id': f"news_{news.id}",
-                    'type': 'news',
-                    'user': news.author.username,
-                    'action': 'опубликовал новость',
-                    'target': news.title[:30] + '...' if len(news.title) > 30 else news.title,
-                    'time': ""
-                }
-            })
-    except:
-        pass
-    
-    # Сортируем по времени (новые сначала) и берем последние 8
-    all_activities.sort(key=lambda x: x['time_obj'], reverse=True)
-    all_activities = all_activities[:8]
-    
-    # Форматируем время для финального списка
-    recent_activities = []
-    for activity in all_activities:
-        time_diff = datetime.now() - activity['time_obj']
-        if time_diff.days > 0:
-            time_str = f"{time_diff.days} дн. назад"
-        elif time_diff.seconds > 3600:
-            hours = time_diff.seconds // 3600
-            time_str = f"{hours} ч. назад"
-        elif time_diff.seconds > 60:
-            minutes = time_diff.seconds // 60
-            time_str = f"{minutes} мин. назад"
-        else:
-            time_str = "только что"
-        
-        activity_data = activity['data']
-        activity_data['time'] = time_str
-        recent_activities.append(activity_data)
+    # Последняя активность (только 8 записей для превью)
+    recent_activities = get_recent_activities(limit=8)
     
     return Response({
         'data': {
             'user_activity': user_activity,
             'content_views': content_views,
             'recent_activities': recent_activities
+        }
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_activity_full(request):
+    """
+    Получение полной активности для модального окна (до 200 записей)
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    # Получаем параметры запроса
+    limit = int(request.GET.get('limit', 200))  # По умолчанию 200
+    activity_type = request.GET.get('type', 'all')  # Фильтр по типу
+    
+    # Ограничиваем максимальное количество записей
+    if limit > 500:
+        limit = 500
+    
+    # Получаем активность
+    all_activities = get_recent_activities(limit=limit)
+    
+    # Фильтруем по типу если указан
+    if activity_type != 'all':
+        all_activities = [
+            activity for activity in all_activities 
+            if activity['type'] == activity_type
+        ]
+      # Группируем по типам для статистики
+    type_counts = {}
+    for activity in all_activities:
+        activity_type = activity['type']
+        type_counts[activity_type] = type_counts.get(activity_type, 0) + 1
+    
+    return Response({
+        'data': {
+            'recent_activities': all_activities,
+            'total_count': len(all_activities),
+            'type_counts': type_counts,
+            'available_types': list(type_counts.keys())
         }
     })
