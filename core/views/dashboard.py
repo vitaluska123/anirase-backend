@@ -794,6 +794,38 @@ def dashboard_news(request):
     except Exception as e:
         return Response({'error': f'Ошибка при получении новостей: {str(e)}'}, status=500)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_news_detail(request, news_id):
+    """
+    Получение полной информации о конкретной новости для редактирования
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        news = News.objects.get(id=news_id)
+        
+        return Response({
+            'data': {
+                'id': news.id,
+                'title': news.title,
+                'content': news.content,
+                'excerpt': news.excerpt,
+                'is_published': news.is_published,
+                'created_at': news.created_at.isoformat(),
+                'updated_at': news.updated_at.isoformat(),
+                'banner': news.banner.url if news.banner else None,
+                'tags': [tag.name for tag in news.tags.all()]
+            }
+        })
+        
+    except News.DoesNotExist:
+        return Response({'error': 'Новость не найдена'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Ошибка при получении новости: {str(e)}'}, status=500)
+
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def dashboard_news_toggle_published(request, news_id):
@@ -842,3 +874,126 @@ def dashboard_news_delete(request, news_id):
         return Response({'error': 'Новость не найдена'}, status=404)
     except Exception as e:
         return Response({'error': f'Ошибка при удалении новости: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def dashboard_news_create(request):
+    """
+    Создание новой новости
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    # Получаем данные для создания
+    title = request.data.get('title')
+    content = request.data.get('content')
+    excerpt = request.data.get('excerpt', '')
+    is_published = request.data.get('is_published', False)
+    tags = request.data.get('tags', [])
+    
+    # Валидация обязательных полей
+    if not title or not content:
+        return Response({'error': 'Заголовок и содержимое обязательны'}, status=400)
+    
+    try:
+        # Создаем новость
+        news = News.objects.create(
+            title=title,
+            content=content,
+            excerpt=excerpt,
+            is_published=is_published
+        )
+        
+        # Добавляем теги
+        if tags:
+            # Создаем теги, если они не существуют
+            tag_objects = []
+            for tag_name in tags:
+                tag, created = Tag.objects.get_or_create(name=tag_name.strip())
+                tag_objects.append(tag)
+            news.tags.set(tag_objects)
+        
+        return Response({
+            'message': 'Новость успешно создана',
+            'news': {
+                'id': news.id,
+                'title': news.title,
+                'content': news.content,
+                'excerpt': news.excerpt,
+                'is_published': news.is_published,
+                'created_at': news.created_at.isoformat(),
+                'updated_at': news.updated_at.isoformat(),
+                'tags': [tag.name for tag in news.tags.all()]
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': f'Ошибка при создании новости: {str(e)}'}, status=500)
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def dashboard_news_edit(request, news_id):
+    """
+    Редактирование новости
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        news = News.objects.get(id=news_id)
+    except News.DoesNotExist:
+        return Response({'error': 'Новость не найдена'}, status=404)
+    
+    # Получаем данные для обновления
+    title = request.data.get('title')
+    content = request.data.get('content')
+    excerpt = request.data.get('excerpt')
+    is_published = request.data.get('is_published')
+    tags = request.data.get('tags')
+    
+    # Валидация обязательных полей
+    if title is not None and not title.strip():
+        return Response({'error': 'Заголовок не может быть пустым'}, status=400)
+    if content is not None and not content.strip():
+        return Response({'error': 'Содержимое не может быть пустым'}, status=400)
+    
+    try:
+        # Обновляем поля
+        if title is not None:
+            news.title = title
+        if content is not None:
+            news.content = content
+        if excerpt is not None:
+            news.excerpt = excerpt
+        if is_published is not None:
+            news.is_published = is_published
+            
+        news.save()
+        
+        # Обновляем теги
+        if tags is not None:
+            tag_objects = []
+            for tag_name in tags:
+                if tag_name.strip():
+                    tag, created = Tag.objects.get_or_create(name=tag_name.strip())
+                    tag_objects.append(tag)
+            news.tags.set(tag_objects)
+        
+        return Response({
+            'message': 'Новость успешно обновлена',
+            'news': {
+                'id': news.id,
+                'title': news.title,
+                'content': news.content,
+                'excerpt': news.excerpt,
+                'is_published': news.is_published,
+                'created_at': news.created_at.isoformat(),
+                'updated_at': news.updated_at.isoformat(),
+                'tags': [tag.name for tag in news.tags.all()]
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': f'Ошибка при обновлении новости: {str(e)}'}, status=500)

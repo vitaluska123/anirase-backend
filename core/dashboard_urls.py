@@ -19,8 +19,10 @@ dashboard_urlpatterns = [
     # Управление контентом
     path('dashboard/content/', dashboard_content, name='dashboard_content'),
     path('dashboard/comments/', dashboard_comments, name='dashboard_comments'),
-    path('dashboard/comments/<int:comment_id>/delete/', dashboard_comment_delete, name='dashboard_comment_delete'),
-    path('dashboard/news/', dashboard_news, name='dashboard_news'),
+    path('dashboard/comments/<int:comment_id>/delete/', dashboard_comment_delete, name='dashboard_comment_delete'),    path('dashboard/news/', dashboard_news, name='dashboard_news'),
+    path('dashboard/news/create/', dashboard_news_create, name='dashboard_news_create'),
+    path('dashboard/news/<int:news_id>/', dashboard_news_detail, name='dashboard_news_detail'),
+    path('dashboard/news/<int:news_id>/edit/', dashboard_news_edit, name='dashboard_news_edit'),
     path('dashboard/news/<int:news_id>/toggle-published/', dashboard_news_toggle_published, name='dashboard_news_toggle_published'),
     path('dashboard/news/<int:news_id>/delete/', dashboard_news_delete, name='dashboard_news_delete'),
     
