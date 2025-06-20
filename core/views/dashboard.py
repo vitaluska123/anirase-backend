@@ -997,3 +997,194 @@ def dashboard_news_edit(request, news_id):
         
     except Exception as e:
         return Response({'error': f'Ошибка при обновлении новости: {str(e)}'}, status=500)
+
+# === УПРАВЛЕНИЕ КОМНАТАМИ ===
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_rooms(request):
+    """
+    Получение списка комнат для dashboard
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        page = int(request.GET.get('page', 1))
+        limit = int(request.GET.get('limit', 20))
+        search = request.GET.get('search', '')
+        is_private = request.GET.get('is_private')
+        sort_field = request.GET.get('sort_field', 'created_at')
+        sort_direction = request.GET.get('sort_direction', 'desc')
+        
+        rooms_query = Room.objects.select_related('host').prefetch_related('sessions')
+        
+        # Поиск по ID комнаты, ID аниме или хосту
+        if search:
+            rooms_query = rooms_query.filter(
+                Q(room_id__icontains=search) | 
+                Q(anime_id__icontains=search) |
+                Q(host__username__icontains=search)
+            )
+        
+        # Фильтр по приватности
+        if is_private is not None:
+            if is_private.lower() == 'true':
+                rooms_query = rooms_query.filter(is_private=True)
+            elif is_private.lower() == 'false':
+                rooms_query = rooms_query.filter(is_private=False)
+        
+        # Сортировка
+        allowed_sort_fields = ['created_at', 'room_id', 'anime_id', 'is_private']
+        if sort_field in allowed_sort_fields:
+            if sort_direction == 'asc':
+                order_field = sort_field
+            else:
+                order_field = f'-{sort_field}'
+            rooms_query = rooms_query.order_by(order_field)
+        else:
+            rooms_query = rooms_query.order_by('-created_at')
+        
+        total = rooms_query.count()
+        rooms = rooms_query[(page-1)*limit:page*limit]
+        
+        rooms_data = []
+        for room in rooms:
+            active_sessions = room.sessions.count()
+            rooms_data.append({
+                'id': room.id,
+                'room_id': room.room_id,
+                'anime_id': room.anime_id,
+                'host': room.host.username if room.host else None,
+                'host_id': room.host.id if room.host else None,
+                'is_private': room.is_private,
+                'allow_control': room.allow_control,
+                'active_sessions': active_sessions,
+                'created_at': room.created_at.isoformat()
+            })
+        
+        return Response({
+            'data': rooms_data,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total,
+                'pages': (total + limit - 1) // limit
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': f'Ошибка при получении комнат: {str(e)}'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_rooms_stats(request):
+    """
+    Получение статистики комнат для dashboard
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        # Общая статистика
+        total_rooms = Room.objects.count()
+        active_rooms = Room.objects.filter(sessions__isnull=False).distinct().count()
+        private_rooms = Room.objects.filter(is_private=True).count()
+        public_rooms = Room.objects.filter(is_private=False).count()
+        
+        # Статистика сессий
+        total_sessions = RoomSession.objects.count()
+        
+        # Топ аниме по комнатам
+        from django.db.models import Count
+        top_anime = Room.objects.values('anime_id').annotate(
+            room_count=Count('id')
+        ).order_by('-room_count')[:10]
+        
+        # Комнаты за последние 7 дней
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        recent_rooms = Room.objects.filter(created_at__gte=seven_days_ago).count()
+        
+        return Response({
+            'data': {
+                'total_rooms': total_rooms,
+                'active_rooms': active_rooms,
+                'private_rooms': private_rooms,
+                'public_rooms': public_rooms,
+                'total_sessions': total_sessions,
+                'recent_rooms': recent_rooms,
+                'top_anime': list(top_anime)
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': f'Ошибка при получении статистики комнат: {str(e)}'}, status=500)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def dashboard_room_delete(request, room_id):
+    """
+    Удаление комнаты
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        room = Room.objects.get(id=room_id)
+        room_name = room.room_id
+        room.delete()
+        
+        return Response({
+            'message': f'Комната {room_name} успешно удалена'
+        })
+        
+    except Room.DoesNotExist:
+        return Response({'error': 'Комната не найдена'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Ошибка при удалении комнаты: {str(e)}'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_room_sessions(request, room_id):
+    """
+    Получение сессий конкретной комнаты
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        room = Room.objects.get(id=room_id)
+        sessions = RoomSession.objects.filter(room=room).select_related('user')
+        
+        sessions_data = []
+        for session in sessions:
+            sessions_data.append({
+                'id': session.id,
+                'user': session.user.username if session.user else 'Anonymous',
+                'user_id': session.user.id if session.user else None,
+                'session_key': session.session_key,
+                'joined_at': session.joined_at.isoformat()
+            })
+        
+        return Response({
+            'data': {
+                'room': {
+                    'id': room.id,
+                    'room_id': room.room_id,
+                    'anime_id': room.anime_id,
+                    'host': room.host.username if room.host else None,
+                    'is_private': room.is_private,
+                    'allow_control': room.allow_control
+                },
+                'sessions': sessions_data
+            }
+        })
+        
+    except Room.DoesNotExist:
+        return Response({'error': 'Комната не найдена'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Ошибка при получении сессий: {str(e)}'}, status=500)
