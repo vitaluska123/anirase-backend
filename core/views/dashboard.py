@@ -8,6 +8,7 @@ from django.db.models import Count, Q
 from datetime import datetime, timedelta
 from django.utils import timezone
 from core.models import *
+from core.utils.admin_logger import AdminLogger, AdminActionReverter
 
 def check_staff_permission(user):
     """
@@ -664,7 +665,7 @@ def dashboard_activity_full(request):
 @permission_classes([IsAuthenticated])
 def dashboard_user_edit(request, user_id):
     """
-    Редактирование пользователя
+    Редактирование пользователя с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -679,31 +680,80 @@ def dashboard_user_edit(request, user_id):
     if user.is_superuser and not request.user.is_superuser:
         return Response({'error': 'Недостаточно прав для редактирования этого пользователя'}, status=403)
     
+    # Сохраняем старые данные для логирования
+    old_data = {
+        'username': user.username,
+        'email': user.email,
+        'is_active': user.is_active,
+        'is_staff': user.is_staff,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+    }
+    
     # Получаем данные для обновления
     username = request.data.get('username')
     email = request.data.get('email')
     is_active = request.data.get('is_active')
     is_staff = request.data.get('is_staff')
+    first_name = request.data.get('first_name', '')
+    last_name = request.data.get('last_name', '')
+    
+    changes_made = False
     
     # Проверяем уникальность username и email (если они изменились)
     if username and username != user.username:
         if User.objects.filter(username=username).exists():
             return Response({'error': 'Пользователь с таким именем уже существует'}, status=400)
         user.username = username
+        changes_made = True
     
     if email and email != user.email:
         if User.objects.filter(email=email).exists():
             return Response({'error': 'Пользователь с таким email уже существует'}, status=400)
         user.email = email
+        changes_made = True
+    
+    # Обновляем имена
+    if first_name != user.first_name:
+        user.first_name = first_name
+        changes_made = True
+        
+    if last_name != user.last_name:
+        user.last_name = last_name
+        changes_made = True
     
     # Обновляем статусы (только если пользователь не изменяет сам себя)
     if is_active is not None and user.id != request.user.id:
-        user.is_active = is_active
+        if user.is_active != is_active:
+            user.is_active = is_active
+            changes_made = True
     
     if is_staff is not None and request.user.is_superuser and user.id != request.user.id:
-        user.is_staff = is_staff
+        if user.is_staff != is_staff:
+            user.is_staff = is_staff
+            changes_made = True
     
-    user.save()
+    if changes_made:
+        user.save()
+        
+        # Логируем изменения
+        new_data = {
+            'username': user.username,
+            'email': user.email,
+            'is_active': user.is_active,
+            'is_staff': user.is_staff,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+        }
+        
+        AdminLogger.log_user_action(
+            admin_user=request.user,
+            action_type='update',
+            target_user=user,
+            old_data=old_data,
+            new_data=new_data,
+            request=request
+        )
     
     return Response({
         'message': 'Пользователь успешно обновлен',
@@ -713,6 +763,8 @@ def dashboard_user_edit(request, user_id):
             'email': user.email,
             'is_active': user.is_active,
             'is_staff': user.is_staff,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
             'date_joined': user.date_joined.isoformat(),
             'last_login': user.last_login.isoformat() if user.last_login else None
         }
@@ -755,7 +807,7 @@ def dashboard_user_toggle_active(request, user_id):
 @permission_classes([IsAuthenticated])
 def dashboard_user_delete(request, user_id):
     """
-    Удаление пользователя
+    Удаление пользователя с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -773,7 +825,32 @@ def dashboard_user_delete(request, user_id):
     if user.id == request.user.id:
         return Response({'error': 'Нельзя удалить самого себя'}, status=403)
     
+    # Сохраняем данные пользователя для логирования и возможного восстановления
+    old_data = {
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'is_active': user.is_active,
+        'is_staff': user.is_staff,
+        'is_superuser': user.is_superuser,
+        'date_joined': user.date_joined.isoformat(),
+        'last_login': user.last_login.isoformat() if user.last_login else None,
+    }
+    
     username = user.username
+    
+    # Логируем удаление ПЕРЕД фактическим удалением
+    AdminLogger.log_user_action(
+        admin_user=request.user,
+        action_type='delete',
+        target_user=user,
+        old_data=old_data,
+        new_data={},
+        request=request
+    )
+    
     user.delete()
     
     return Response({
@@ -784,7 +861,7 @@ def dashboard_user_delete(request, user_id):
 @permission_classes([IsAuthenticated])
 def dashboard_user_create(request):
     """
-    Создание нового пользователя
+    Создание нового пользователя с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -794,6 +871,8 @@ def dashboard_user_create(request):
     username = request.data.get('username')
     email = request.data.get('email')
     password = request.data.get('password')
+    first_name = request.data.get('first_name', '')
+    last_name = request.data.get('last_name', '')
     is_active = request.data.get('is_active', True)
     is_staff = request.data.get('is_staff', False)
     
@@ -818,8 +897,30 @@ def dashboard_user_create(request):
             username=username,
             email=email,
             password=password,
+            first_name=first_name,
+            last_name=last_name,
             is_active=is_active,
             is_staff=is_staff if request.user.is_superuser else False  # Только суперпользователь может назначать staff
+        )
+        
+        # Логируем создание пользователя
+        new_data = {
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'is_active': user.is_active,
+            'is_staff': user.is_staff,
+            'date_joined': user.date_joined.isoformat(),
+        }
+        
+        AdminLogger.log_user_action(
+            admin_user=request.user,
+            action_type='create',
+            target_user=user,
+            old_data={},
+            new_data=new_data,
+            request=request
         )
         
         return Response({
@@ -828,6 +929,8 @@ def dashboard_user_create(request):
                 'id': user.id,
                 'username': user.username,
                 'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
                 'is_active': user.is_active,
                 'is_staff': user.is_staff,
                 'is_superuser': user.is_superuser,
@@ -919,7 +1022,7 @@ def dashboard_comments(request):
 @permission_classes([IsAuthenticated])
 def dashboard_comment_delete(request, comment_id):
     """
-    Удаление комментария
+    Удаление комментария с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -927,11 +1030,37 @@ def dashboard_comment_delete(request, comment_id):
     
     try:
         comment = Comment.objects.get(id=comment_id)
-        comment_text = comment.text[:50] + '...' if len(comment.text) > 50 else comment.text
+        
+        # Сохраняем данные для логирования (очищаем от проблемных символов)
+        old_data = {
+            'id': comment.id,
+            'user_id': comment.user.id if comment.user else None,
+            'user_username': comment.user.username if comment.user else 'Неизвестный',
+            'anime_id': comment.anime_id,
+            'text': comment.text.encode('ascii', 'ignore').decode('ascii') if comment.text else '',
+            'created_at': comment.created_at.isoformat() if comment.created_at else '',
+            'parent_id': comment.parent.id if comment.parent else None,
+            'likes_count': getattr(comment, 'likes_count', 0)
+        }
+        
+        # Безопасно получаем текст для сообщения
+        comment_text = comment.text[:50] + '...' if comment.text and len(comment.text) > 50 else (comment.text or 'Без текста')
+        safe_comment_text = comment_text.encode('ascii', 'ignore').decode('ascii')
+        
+        # Логируем удаление
+        AdminLogger.log_comment_action(
+            admin_user=request.user,
+            action_type='delete',
+            comment_obj=comment,
+            old_data=old_data,
+            new_data={},
+            request=request
+        )
+        
         comment.delete()
         
         return Response({
-            'message': f'Комментарий "{comment_text}" успешно удален'
+            'message': f'Комментарий "{safe_comment_text}" успешно удален'
         })
         
     except Comment.DoesNotExist:
@@ -1051,7 +1180,7 @@ def dashboard_news_detail(request, news_id):
 @permission_classes([IsAuthenticated])
 def dashboard_news_toggle_published(request, news_id):
     """
-    Переключение статуса публикации новости
+    Переключение статуса публикации новости с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -1059,8 +1188,29 @@ def dashboard_news_toggle_published(request, news_id):
     
     try:
         news = News.objects.get(id=news_id)
+        
+        # Сохраняем старые данные
+        old_data = {
+            'is_published': news.is_published
+        }
+        
         news.is_published = not news.is_published
         news.save()
+        
+        # Новые данные
+        new_data = {
+            'is_published': news.is_published
+        }
+        
+        # Логируем изменение статуса
+        AdminLogger.log_news_action(
+            admin_user=request.user,
+            action_type='status_change',
+            news_obj=news,
+            old_data=old_data,
+            new_data=new_data,
+            request=request
+        )
         
         return Response({
             'message': f'Новость "{news.title}" {"опубликована" if news.is_published else "снята с публикации"}',
@@ -1076,7 +1226,7 @@ def dashboard_news_toggle_published(request, news_id):
 @permission_classes([IsAuthenticated])
 def dashboard_news_delete(request, news_id):
     """
-    Удаление новости
+    Удаление новости с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -1084,7 +1234,31 @@ def dashboard_news_delete(request, news_id):
     
     try:
         news = News.objects.get(id=news_id)
+        
+        # Сохраняем данные для логирования
+        old_data = {
+            'id': news.id,
+            'title': news.title,
+            'content': news.content[:100] + '...' if len(news.content) > 100 else news.content,
+            'excerpt': news.excerpt,
+            'is_published': news.is_published,
+            'created_at': news.created_at.isoformat(),
+            'updated_at': news.updated_at.isoformat(),
+            'tags': [tag.name for tag in news.tags.all()]
+        }
+        
         news_title = news.title
+        
+        # Логируем удаление
+        AdminLogger.log_news_action(
+            admin_user=request.user,
+            action_type='delete',
+            news_obj=news,
+            old_data=old_data,
+            new_data={},
+            request=request
+        )
+        
         news.delete()
         
         return Response({
@@ -1100,7 +1274,7 @@ def dashboard_news_delete(request, news_id):
 @permission_classes([IsAuthenticated])
 def dashboard_news_create(request):
     """
-    Создание новой новости
+    Создание новой новости с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -1135,6 +1309,26 @@ def dashboard_news_create(request):
                 tag_objects.append(tag)
             news.tags.set(tag_objects)
         
+        # Логируем создание новости
+        new_data = {
+            'id': news.id,
+            'title': news.title,
+            'content': news.content[:100] + '...' if len(news.content) > 100 else news.content,
+            'excerpt': news.excerpt,
+            'is_published': news.is_published,
+            'created_at': news.created_at.isoformat(),
+            'tags': [tag.name for tag in news.tags.all()]
+        }
+        
+        AdminLogger.log_news_action(
+            admin_user=request.user,
+            action_type='create',
+            news_obj=news,
+            old_data={},
+            new_data=new_data,
+            request=request
+        )
+        
         return Response({
             'message': 'Новость успешно создана',
             'news': {
@@ -1156,7 +1350,7 @@ def dashboard_news_create(request):
 @permission_classes([IsAuthenticated])
 def dashboard_news_edit(request, news_id):
     """
-    Редактирование новости
+    Редактирование новости с логированием
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
@@ -1166,6 +1360,17 @@ def dashboard_news_edit(request, news_id):
         news = News.objects.get(id=news_id)
     except News.DoesNotExist:
         return Response({'error': 'Новость не найдена'}, status=404)
+    
+    # Сохраняем старые данные для логирования
+    old_data = {
+        'id': news.id,
+        'title': news.title,
+        'content': news.content[:100] + '...' if len(news.content) > 100 else news.content,
+        'excerpt': news.excerpt,
+        'is_published': news.is_published,
+        'updated_at': news.updated_at.isoformat(),
+        'tags': [tag.name for tag in news.tags.all()]
+    }
     
     # Получаем данные для обновления
     title = request.data.get('title')
@@ -1181,26 +1386,58 @@ def dashboard_news_edit(request, news_id):
         return Response({'error': 'Содержимое не может быть пустым'}, status=400)
     
     try:
+        changes_made = False
+        
         # Обновляем поля
-        if title is not None:
+        if title is not None and title != news.title:
             news.title = title
-        if content is not None:
+            changes_made = True
+        if content is not None and content != news.content:
             news.content = content
-        if excerpt is not None:
+            changes_made = True
+        if excerpt is not None and excerpt != news.excerpt:
             news.excerpt = excerpt
-        if is_published is not None:
+            changes_made = True
+        if is_published is not None and is_published != news.is_published:
             news.is_published = is_published
+            changes_made = True
             
-        news.save()
+        if changes_made:
+            news.save()
         
         # Обновляем теги
         if tags is not None:
-            tag_objects = []
-            for tag_name in tags:
-                if tag_name.strip():
-                    tag, created = Tag.objects.get_or_create(name=tag_name.strip())
+            old_tags = set(tag.name for tag in news.tags.all())
+            new_tags = set(tag.strip() for tag in tags if tag.strip())
+            
+            if old_tags != new_tags:
+                tag_objects = []
+                for tag_name in new_tags:
+                    tag, created = Tag.objects.get_or_create(name=tag_name)
                     tag_objects.append(tag)
-            news.tags.set(tag_objects)
+                news.tags.set(tag_objects)
+                changes_made = True
+        
+        if changes_made:
+            # Логируем изменения
+            new_data = {
+                'id': news.id,
+                'title': news.title,
+                'content': news.content[:100] + '...' if len(news.content) > 100 else news.content,
+                'excerpt': news.excerpt,
+                'is_published': news.is_published,
+                'updated_at': news.updated_at.isoformat(),
+                'tags': [tag.name for tag in news.tags.all()]
+            }
+            
+            AdminLogger.log_news_action(
+                admin_user=request.user,
+                action_type='update',
+                news_obj=news,
+                old_data=old_data,
+                new_data=new_data,
+                request=request
+            )
         
         return Response({
             'message': 'Новость успешно обновлена',
@@ -1407,3 +1644,226 @@ def dashboard_room_sessions(request, room_id):
         return Response({'error': 'Комната не найдена'}, status=404)
     except Exception as e:
         return Response({'error': f'Ошибка при получении сессий: {str(e)}'}, status=500)
+
+# === ЛОГИ ДЕЙСТВИЙ АДМИНИСТРАТОРОВ ===
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_admin_logs(request):
+    """
+    Получение логов действий администраторов
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    # Параметры пагинации и фильтрации
+    page = int(request.GET.get('page', 1))
+    limit = min(int(request.GET.get('limit', 50)), 100)  # Максимум 100 записей
+    admin_user = request.GET.get('admin_user')
+    action_type = request.GET.get('action_type')
+    entity_type = request.GET.get('entity_type')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    
+    # Базовый запрос
+    queryset = AdminActionLog.objects.select_related('admin_user', 'reverted_by').all()
+    
+    # Применяем фильтры
+    if admin_user:
+        queryset = queryset.filter(admin_user__username__icontains=admin_user)
+    
+    if action_type:
+        queryset = queryset.filter(action_type=action_type)
+    
+    if entity_type:
+        queryset = queryset.filter(entity_type=entity_type)
+    
+    if date_from:
+        try:
+            date_from_parsed = timezone.datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            queryset = queryset.filter(created_at__gte=date_from_parsed)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            date_to_parsed = timezone.datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+            queryset = queryset.filter(created_at__lte=date_to_parsed)
+        except ValueError:
+            pass
+    
+    # Подсчет общего количества
+    total_count = queryset.count()
+    
+    # Пагинация
+    offset = (page - 1) * limit
+    logs = queryset[offset:offset + limit]
+    
+    # Формируем данные для ответа
+    logs_data = []
+    for log in logs:
+        logs_data.append({
+            'id': log.id,
+            'admin_user': {
+                'id': log.admin_user.id,
+                'username': log.admin_user.username,
+                'email': log.admin_user.email
+            },
+            'action_type': log.action_type,
+            'action_type_display': log.get_action_type_display(),
+            'entity_type': log.entity_type,
+            'entity_type_display': log.get_entity_type_display(),
+            'entity_id': log.entity_id,
+            'entity_name': log.entity_name,
+            'description': log.description,
+            'ip_address': log.ip_address,
+            'is_reverted': log.is_reverted,
+            'can_be_reverted': log.can_be_reverted(),
+            'revert_description': log.get_revert_description(),
+            'reverted_at': log.reverted_at.isoformat() if log.reverted_at else None,
+            'reverted_by': {
+                'id': log.reverted_by.id,
+                'username': log.reverted_by.username
+            } if log.reverted_by else None,
+            'revert_reason': log.revert_reason,
+            'created_at': log.created_at.isoformat(),
+            'old_data': log.old_data,
+            'new_data': log.new_data
+        })
+    
+    # Статистика для фильтров
+    action_types = AdminActionLog.objects.values_list('action_type', flat=True).distinct()
+    entity_types = AdminActionLog.objects.values_list('entity_type', flat=True).distinct()
+    
+    return Response({
+        'data': {
+            'logs': logs_data,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total_count,
+                'pages': (total_count + limit - 1) // limit
+            },
+            'filters': {
+                'action_types': list(action_types),
+                'entity_types': list(entity_types)
+            }
+        }
+    })
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def dashboard_admin_log_revert(request, log_id):
+    """
+    Откат действия администратора
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        log = AdminActionLog.objects.get(id=log_id)
+    except AdminActionLog.DoesNotExist:
+        return Response({'error': 'Лог действия не найден'}, status=404)
+    
+    if not log.can_be_reverted():
+        return Response({'error': 'Это действие нельзя откатить'}, status=400)
+    
+    if log.is_reverted:
+        return Response({'error': 'Это действие уже было откачено'}, status=400)
+    
+    # Получаем причину отката
+    reason = request.data.get('reason', '')
+    if not reason:
+        return Response({'error': 'Укажите причину отката'}, status=400)
+    
+    # Выполняем откат
+    success = AdminActionReverter.revert_action(log, request.user, reason)
+    
+    if success:
+        # Логируем сам факт отката
+        AdminLogger.log_action(
+            admin_user=request.user,
+            action_type='system_action',
+            entity_type=log.entity_type,
+            entity_id=log.entity_id,
+            entity_name=f"Откат действия: {log.entity_name}",
+            old_data={'reverted_log_id': log.id},
+            new_data={'revert_reason': reason},
+            description=f"Откат действия {log.get_action_type_display()} для {log.entity_name}",
+            request=request
+        )
+        
+        return Response({
+            'message': 'Действие успешно откачено',
+            'reverted_at': log.reverted_at.isoformat() if log.reverted_at else None
+        })
+    else:
+        return Response({'error': 'Не удалось откатить действие'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_admin_logs_stats(request):
+    """
+    Статистика по логам действий администраторов
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    # Период для статистики
+    period = request.GET.get('period', '7d')
+    now = timezone.now()
+    
+    if period == '24h':
+        start_date = now - timedelta(hours=24)
+    elif period == '7d':
+        start_date = now - timedelta(days=7)
+    elif period == '30d':
+        start_date = now - timedelta(days=30)
+    else:
+        start_date = now - timedelta(days=7)
+    
+    # Общая статистика
+    total_actions = AdminActionLog.objects.filter(created_at__gte=start_date).count()
+    reverted_actions = AdminActionLog.objects.filter(
+        created_at__gte=start_date,
+        is_reverted=True
+    ).count()
+    
+    # Статистика по типам действий
+    actions_by_type = AdminActionLog.objects.filter(created_at__gte=start_date)\
+        .values('action_type')\
+        .annotate(count=Count('id'))\
+        .order_by('-count')
+      # Статистика по администраторам
+    actions_by_admin = AdminActionLog.objects.filter(created_at__gte=start_date)\
+        .values('admin_user__username')\
+        .annotate(count=Count('id'))\
+        .order_by('-count')[:10]
+    
+    # Количество уникальных активных администраторов
+    active_admins_count = AdminActionLog.objects.filter(created_at__gte=start_date)\
+        .values('admin_user')\
+        .distinct()\
+        .count()
+    
+    # Статистика по типам сущностей
+    actions_by_entity = AdminActionLog.objects.filter(created_at__gte=start_date)\
+        .values('entity_type')\
+        .annotate(count=Count('id'))\
+        .order_by('-count')
+    
+    return Response({
+        'data': {
+            'period': period,
+            'total_actions': total_actions,
+            'reverted_actions': reverted_actions,
+            'revert_rate': round((reverted_actions / total_actions * 100) if total_actions > 0 else 0, 1),
+            'active_admins_count': active_admins_count,
+            'actions_by_type': list(actions_by_type),
+            'actions_by_admin': list(actions_by_admin),
+            'actions_by_entity': list(actions_by_entity)
+        }
+    })

@@ -30,6 +30,11 @@ dashboard_urlpatterns = [
     path('dashboard/rooms/<str:room_id>/delete/', dashboard_room_delete, name='dashboard_room_delete'),
     path('dashboard/rooms/<str:room_id>/sessions/', dashboard_room_sessions, name='dashboard_room_sessions'),
     
+    # Логи действий администраторов
+    path('dashboard/admin-logs/', dashboard_admin_logs, name='dashboard_admin_logs'),
+    path('dashboard/admin-logs/<int:log_id>/revert/', dashboard_admin_log_revert, name='dashboard_admin_log_revert'),
+    path('dashboard/admin-logs/stats/', dashboard_admin_logs_stats, name='dashboard_admin_logs_stats'),
+    
     # Управление магазином
     path('dashboard/shop/', dashboard_shop, name='dashboard_shop'),
 ]
