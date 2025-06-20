@@ -360,40 +360,261 @@ def dashboard_shop(request):
 @permission_classes([IsAuthenticated])
 def dashboard_analytics(request):
     """
-    Получение аналитических данных
+    Получение полных аналитических данных для страницы Analytics
     """
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
         return Response(error, status=status.HTTP_403_FORBIDDEN)
-      # Данные для графиков активности пользователей за последние 30 дней
-    user_activity = []
-    for i in range(30):
-        date = timezone.now() - timedelta(days=29-i)
-        day_users = User.objects.filter(date_joined__date=date.date()).count()
-        user_activity.append({
-            'name': date.strftime('%d.%m'),
-            'value': day_users
+
+    # Получаем параметр периода
+    period = request.GET.get('period', '7d')
+    
+    # Определяем временные рамки
+    now = timezone.now()
+    if period == '24h':
+        start_date = now - timedelta(hours=24)
+        date_format = '%H:00'
+        date_range = 24
+        date_unit = 'hours'
+    elif period == '7d':
+        start_date = now - timedelta(days=7)
+        date_format = '%d.%m'
+        date_range = 7
+        date_unit = 'days'
+    elif period == '30d':
+        start_date = now - timedelta(days=30)
+        date_format = '%d.%m'
+        date_range = 30
+        date_unit = 'days'
+    elif period == '90d':
+        start_date = now - timedelta(days=90)
+        date_format = '%d.%m'
+        date_range = 90
+        date_unit = 'days'
+    else:
+        start_date = now - timedelta(days=7)
+        date_format = '%d.%m'
+        date_range = 7
+        date_unit = 'days'
+
+    # === ОСНОВНЫЕ МЕТРИКИ ===
+    
+    # Всего пользователей
+    total_users = User.objects.count()
+    
+    # Новые пользователи за период
+    new_users = User.objects.filter(date_joined__gte=start_date).count()
+    
+    # Активные пользователи (те, кто комментировал или добавлял закладки за период)
+    active_users = User.objects.filter(
+        Q(comments__created_at__gte=start_date) |
+        Q(bookmarks__created_at__gte=start_date) |
+        Q(history__watched_at__gte=start_date)
+    ).distinct().count()
+    
+    # Всего просмотров (история просмотров)
+    total_views = History.objects.filter(watched_at__gte=start_date).count()
+    
+    # Всего комментариев за период
+    total_comments = Comment.objects.filter(created_at__gte=start_date).count()
+    
+    # Комнаты за период
+    active_rooms = Room.objects.filter(created_at__gte=start_date).count()
+    total_rooms = Room.objects.count()
+
+    # === ГРАФИКИ АКТИВНОСТИ ===
+    
+    # График активности пользователей
+    user_activity_data = []
+    
+    if date_unit == 'hours':
+        for i in range(date_range):
+            hour_start = now - timedelta(hours=date_range-1-i)
+            hour_end = hour_start + timedelta(hours=1)
+            
+            new_users_count = User.objects.filter(
+                date_joined__gte=hour_start, 
+                date_joined__lt=hour_end
+            ).count()
+            
+            sessions_count = RoomSession.objects.filter(
+                joined_at__gte=hour_start,
+                joined_at__lt=hour_end
+            ).count()
+            
+            user_activity_data.append({
+                'name': hour_start.strftime(date_format),
+                'users': new_users_count,
+                'sessions': sessions_count
+            })
+    else:
+        for i in range(date_range):
+            day_start = (now - timedelta(days=date_range-1-i)).replace(hour=0, minute=0, second=0)
+            day_end = day_start + timedelta(days=1)
+            
+            new_users_count = User.objects.filter(
+                date_joined__gte=day_start, 
+                date_joined__lt=day_end
+            ).count()
+            
+            sessions_count = RoomSession.objects.filter(
+                joined_at__gte=day_start,
+                joined_at__lt=day_end
+            ).count()
+            
+            user_activity_data.append({
+                'name': day_start.strftime(date_format),
+                'users': new_users_count,
+                'sessions': sessions_count
+            })
+
+    # === ТОП АНИМЕ (по просмотрам) ===
+    
+    # Получаем топ аниме по количеству просмотров
+    top_anime_raw = History.objects.filter(watched_at__gte=start_date)\
+        .values('anime_id')\
+        .annotate(views=Count('id'))\
+        .order_by('-views')[:10]
+    
+    top_anime_data = []
+    for idx, anime in enumerate(top_anime_raw, 1):
+        top_anime_data.append({
+            'rank': idx,
+            'title': f"Аниме {anime['anime_id'][:20]}",  # Ограничиваем длину
+            'views': anime['views']
         })
+
+    # === ТОП ПОЛЬЗОВАТЕЛИ (по активности) ===
     
-    # Данные по просмотрам контента по дням недели
-    content_views = [
-        {'name': 'Пн', 'value': 120},
-        {'name': 'Вт', 'value': 98},
-        {'name': 'Ср', 'value': 156},
-        {'name': 'Чт', 'value': 134},
-        {'name': 'Пт', 'value': 178},
-        {'name': 'Сб', 'value': 203},
-        {'name': 'Вс', 'value': 167}
-    ]
+    # Получаем топ пользователей по количеству активности
+    top_users_raw = User.objects.filter(
+        Q(comments__created_at__gte=start_date) |
+        Q(history__watched_at__gte=start_date) |
+        Q(hosted_rooms__created_at__gte=start_date)
+    ).annotate(
+        activity_count=Count('comments', filter=Q(comments__created_at__gte=start_date)) +
+                      Count('history', filter=Q(history__watched_at__gte=start_date)) +
+                      Count('hosted_rooms', filter=Q(hosted_rooms__created_at__gte=start_date))
+    ).order_by('-activity_count')[:10]
     
+    top_users_data = []
+    for idx, user in enumerate(top_users_raw, 1):
+        sessions_count = RoomSession.objects.filter(
+            user=user, 
+            joined_at__gte=start_date
+        ).count()
+        
+        top_users_data.append({
+            'rank': idx,
+            'username': user.username,
+            'sessions': sessions_count,
+            'hours': round(sessions_count * 1.5, 1)  # Примерная оценка часов
+        })
+
+    # === СТАТИСТИКА КОНТЕНТА ===
+    
+    # Статистика по типам активности
+    content_stats = []
+    
+    # Закладки по статусам
+    bookmark_stats = Bookmark.objects.filter(created_at__gte=start_date)\
+        .values('status')\
+        .annotate(count=Count('id'))
+    
+    status_mapping = {
+        'watching': 'Смотрю',
+        'planned': 'Запланировано', 
+        'completed': 'Просмотрено'
+    }
+    
+    for stat in bookmark_stats:
+        content_stats.append({
+            'name': status_mapping.get(stat['status'], stat['status']),
+            'value': stat['count'],
+            'color': {
+                'watching': '#10b981',
+                'planned': '#f59e0b', 
+                'completed': '#3b82f6'
+            }.get(stat['status'], '#6b7280')
+        })
+
+    # === СТАТИСТИКА КОМНАТ ===
+    
+    # Статистика по комнатам
+    room_stats = {
+        'total_rooms': total_rooms,
+        'active_rooms': active_rooms,
+        'private_rooms': Room.objects.filter(is_private=True).count(),
+        'public_rooms': Room.objects.filter(is_private=False).count(),
+    }
+
+    # === ТРЕНДЫ ===
+    
+    # Вычисляем тренды по сравнению с предыдущим периодом
+    prev_period_start = start_date - (now - start_date)
+    prev_period_end = start_date
+    
+    prev_users = User.objects.filter(
+        date_joined__gte=prev_period_start,
+        date_joined__lt=prev_period_end
+    ).count()
+    
+    prev_views = History.objects.filter(
+        watched_at__gte=prev_period_start,
+        watched_at__lt=prev_period_end
+    ).count()
+    
+    prev_comments = Comment.objects.filter(
+        created_at__gte=prev_period_start,
+        created_at__lt=prev_period_end
+    ).count()
+
+    # Вычисляем процентные изменения
+    def calculate_trend(current, previous):
+        if previous == 0:
+            return 100 if current > 0 else 0
+        return round(((current - previous) / previous) * 100, 1)
+
+    trends = {
+        'users_trend': calculate_trend(new_users, prev_users),
+        'views_trend': calculate_trend(total_views, prev_views),
+        'comments_trend': calculate_trend(total_comments, prev_comments)
+    }
+
     # Последняя активность (только 8 записей для превью)
     recent_activities = get_recent_activities(limit=8)
     
     return Response({
         'data': {
-            'user_activity': user_activity,
-            'content_views': content_views,
-            'recent_activities': recent_activities
+            # Основные метрики
+            'total_users': total_users,
+            'new_users': new_users,
+            'active_users': active_users,
+            'total_views': total_views,
+            'total_comments': total_comments,
+            'active_rooms': active_rooms,
+            
+            # Тренды
+            'trends': trends,
+            
+            # Графики
+            'user_activity': user_activity_data,
+            'content_data': content_stats,
+            
+            # Топы
+            'top_anime': top_anime_data,
+            'top_users': top_users_data,
+            
+            # Статистика комнат
+            'room_stats': room_stats,
+            
+            # Активность
+            'recent_activities': recent_activities,
+            
+            # Метаданные
+            'period': period,
+            'period_start': start_date.isoformat(),
+            'period_end': now.isoformat()
         }
     })
 
