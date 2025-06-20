@@ -534,3 +534,62 @@ def dashboard_user_delete(request, user_id):
     return Response({
         'message': f'Пользователь {username} успешно удален'
     })
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def dashboard_user_create(request):
+    """
+    Создание нового пользователя
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    # Получаем данные для создания
+    username = request.data.get('username')
+    email = request.data.get('email')
+    password = request.data.get('password')
+    is_active = request.data.get('is_active', True)
+    is_staff = request.data.get('is_staff', False)
+    
+    # Валидация обязательных полей
+    if not username or not email or not password:
+        return Response({'error': 'Имя пользователя, email и пароль обязательны'}, status=400)
+    
+    # Проверяем уникальность username и email
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Пользователь с таким именем уже существует'}, status=400)
+    
+    if User.objects.filter(email=email).exists():
+        return Response({'error': 'Пользователь с таким email уже существует'}, status=400)
+    
+    # Валидация пароля
+    if len(password) < 6:
+        return Response({'error': 'Пароль должен содержать минимум 6 символов'}, status=400)
+    
+    try:
+        # Создаем пользователя
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            is_active=is_active,
+            is_staff=is_staff if request.user.is_superuser else False  # Только суперпользователь может назначать staff
+        )
+        
+        return Response({
+            'message': 'Пользователь успешно создан',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'is_active': user.is_active,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
+                'date_joined': user.date_joined.isoformat(),
+                'last_login': None
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': f'Ошибка при создании пользователя: {str(e)}'}, status=500)
