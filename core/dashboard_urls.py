@@ -24,12 +24,11 @@ dashboard_urlpatterns = [
     path('dashboard/news/<int:news_id>/', dashboard_news_detail, name='dashboard_news_detail'),
     path('dashboard/news/<int:news_id>/edit/', dashboard_news_edit, name='dashboard_news_edit'),
     path('dashboard/news/<int:news_id>/toggle-published/', dashboard_news_toggle_published, name='dashboard_news_toggle_published'),
-    path('dashboard/news/<int:news_id>/delete/', dashboard_news_delete, name='dashboard_news_delete'),
-      # Управление комнатами
+    path('dashboard/news/<int:news_id>/delete/', dashboard_news_delete, name='dashboard_news_delete'),    # Управление комнатами
     path('dashboard/rooms/', dashboard_rooms, name='dashboard_rooms'),
     path('dashboard/rooms/stats/', dashboard_rooms_stats, name='dashboard_rooms_stats'),
-    path('dashboard/rooms/<int:room_id>/delete/', dashboard_room_delete, name='dashboard_room_delete'),
-    path('dashboard/rooms/<int:room_id>/sessions/', dashboard_room_sessions, name='dashboard_room_sessions'),
+    path('dashboard/rooms/<str:room_id>/delete/', dashboard_room_delete, name='dashboard_room_delete'),
+    path('dashboard/rooms/<str:room_id>/sessions/', dashboard_room_sessions, name='dashboard_room_sessions'),
     
     # Управление магазином
     path('dashboard/shop/', dashboard_shop, name='dashboard_shop'),

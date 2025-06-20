@@ -1131,9 +1131,8 @@ def dashboard_room_delete(request, room_id):
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
         return Response(error, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        room = Room.objects.get(id=room_id)
+        room = Room.objects.get(room_id=room_id)
         room_name = room.room_id
         room.delete()
         
@@ -1155,9 +1154,8 @@ def dashboard_room_sessions(request, room_id):
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
         return Response(error, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        room = Room.objects.get(id=room_id)
+        room = Room.objects.get(room_id=room_id)
         sessions = RoomSession.objects.filter(room=room).select_related('user')
         
         sessions_data = []
