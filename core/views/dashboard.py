@@ -1651,11 +1651,14 @@ def dashboard_room_sessions(request, room_id):
 @permission_classes([IsAuthenticated])
 def dashboard_admin_logs(request):
     """
-    Получение логов действий администраторов
+    Получение логов действий администраторов (только для суперпользователей)
     """
-    is_allowed, error = check_staff_permission(request.user)
-    if not is_allowed:
-        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    # Проверяем, что пользователь - суперпользователь
+    if not request.user.is_superuser:
+        return Response({
+            'error': 'Access denied', 
+            'message': 'Доступ к логам администраторов разрешен только для суперпользователей'
+        }, status=status.HTTP_403_FORBIDDEN)
     
     # Параметры пагинации и фильтрации
     page = int(request.GET.get('page', 1))
@@ -1756,11 +1759,14 @@ def dashboard_admin_logs(request):
 @permission_classes([IsAuthenticated])
 def dashboard_admin_log_revert(request, log_id):
     """
-    Откат действия администратора
+    Откат действия администратора (только для суперпользователей)
     """
-    is_allowed, error = check_staff_permission(request.user)
-    if not is_allowed:
-        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    # Проверяем, что пользователь - суперпользователь
+    if not request.user.is_superuser:
+        return Response({
+            'error': 'Access denied', 
+            'message': 'Доступ к откату действий администраторов разрешен только для суперпользователей'
+        }, status=status.HTTP_403_FORBIDDEN)
     
     try:
         log = AdminActionLog.objects.get(id=log_id)
@@ -1806,11 +1812,14 @@ def dashboard_admin_log_revert(request, log_id):
 @permission_classes([IsAuthenticated])
 def dashboard_admin_logs_stats(request):
     """
-    Статистика по логам действий администраторов
+    Статистика по логам действий администраторов (только для суперпользователей)
     """
-    is_allowed, error = check_staff_permission(request.user)
-    if not is_allowed:
-        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    # Проверяем, что пользователь - суперпользователь
+    if not request.user.is_superuser:
+        return Response({
+            'error': 'Access denied', 
+            'message': 'Доступ к логам администраторов разрешен только для суперпользователей'
+        }, status=status.HTTP_403_FORBIDDEN)
     
     # Период для статистики
     period = request.GET.get('period', '7d')

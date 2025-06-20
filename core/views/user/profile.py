@@ -40,6 +40,7 @@ class UserProfileView(APIView):
             'username': user.username,
             'email': user.email,
             'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
             'avatar_url': profile_data['avatar_url'],
             'group': profile_data['group'],
             'group_color': profile_data['group_color'],
