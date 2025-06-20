@@ -217,11 +217,14 @@ def dashboard_users(request):
     is_allowed, error = check_staff_permission(request.user)
     if not is_allowed:
         return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
     page = int(request.GET.get('page', 1))
     limit = int(request.GET.get('limit', 20))
     search = request.GET.get('search', '')
     is_active = request.GET.get('is_active')
     is_staff = request.GET.get('is_staff')
+    sort_field = request.GET.get('sort_field', 'date_joined')
+    sort_direction = request.GET.get('sort_direction', 'desc')
     
     users_query = User.objects.all()
     
@@ -244,18 +247,39 @@ def dashboard_users(request):
             users_query = users_query.filter(is_staff=True)
         elif is_staff.lower() == 'false':
             users_query = users_query.filter(is_staff=False)
+    
+    # Сортировка
+    allowed_sort_fields = ['username', 'email', 'date_joined', 'last_login', 'is_active', 'is_staff']
+    if sort_field in allowed_sort_fields:
+        if sort_direction == 'asc':
+            order_field = sort_field
+        else:
+            order_field = f'-{sort_field}'
+        
+        # Обработка null значений для last_login
+        if sort_field == 'last_login':
+            if sort_direction == 'asc':
+                users_query = users_query.order_by('last_login', 'date_joined')
+            else:
+                users_query = users_query.order_by('-last_login', '-date_joined')
+        else:
+            users_query = users_query.order_by(order_field)
+    else:
+        # По умолчанию сортируем по дате регистрации (новые сначала)
+        users_query = users_query.order_by('-date_joined')
+    
     total = users_query.count()
-    users = users_query.order_by('-date_joined')[(page-1)*limit:page*limit]
+    users = users_query[(page-1)*limit:page*limit]
     
     users_data = []
-    for user in users:        users_data.append({
+    for user in users:
+        users_data.append({
             'id': user.id,
             'username': user.username,
             'email': user.email,
             'is_active': user.is_active,
             'is_staff': user.is_staff,
-            'is_superuser': user.is_superuser,
-            'date_joined': user.date_joined.isoformat(),
+            'is_superuser': user.is_superuser,            'date_joined': user.date_joined.isoformat(),
             'last_login': user.last_login.isoformat() if user.last_login else None
         })
     
