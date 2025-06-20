@@ -617,3 +617,228 @@ def dashboard_user_create(request):
         
     except Exception as e:
         return Response({'error': f'Ошибка при создании пользователя: {str(e)}'}, status=500)
+
+# === УПРАВЛЕНИЕ КОММЕНТАРИЯМИ ===
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_comments(request):
+    """
+    Получение списка комментариев для управления
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    page = int(request.GET.get('page', 1))
+    limit = int(request.GET.get('limit', 20))
+    search = request.GET.get('search', '')
+    anime_id = request.GET.get('anime_id', '')
+    sort_field = request.GET.get('sort_field', 'created_at')
+    sort_direction = request.GET.get('sort_direction', 'desc')
+    
+    try:
+        comments_query = Comment.objects.select_related('user').all()
+        
+        # Поиск
+        if search:
+            comments_query = comments_query.filter(
+                Q(text__icontains=search) | 
+                Q(user__username__icontains=search) |
+                Q(anime_id__icontains=search)
+            )
+        
+        # Фильтр по аниме
+        if anime_id:
+            comments_query = comments_query.filter(anime_id=anime_id)
+        
+        # Сортировка
+        allowed_sort_fields = ['created_at', 'updated_at', 'user__username', 'anime_id']
+        if sort_field in allowed_sort_fields:
+            if sort_direction == 'asc':
+                order_field = sort_field
+            else:
+                order_field = f'-{sort_field}'
+            comments_query = comments_query.order_by(order_field)
+        else:
+            comments_query = comments_query.order_by('-created_at')
+        
+        total = comments_query.count()
+        comments = comments_query[(page-1)*limit:page*limit]
+        
+        comments_data = []
+        for comment in comments:
+            comments_data.append({
+                'id': comment.id,
+                'text': comment.text,
+                'anime_id': comment.anime_id,
+                'user': comment.user.username,
+                'user_id': comment.user.id,
+                'created_at': comment.created_at.isoformat(),
+                'updated_at': comment.updated_at.isoformat(),
+                'parent_id': comment.parent.id if comment.parent else None,
+                'replies_count': comment.replies.count() if hasattr(comment, 'replies') else 0,
+                'likes_count': comment.likes_count
+            })
+        
+        return Response({
+            'data': comments_data,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total,
+                'pages': (total + limit - 1) // limit
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': f'Ошибка при получении комментариев: {str(e)}'}, status=500)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def dashboard_comment_delete(request, comment_id):
+    """
+    Удаление комментария
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        comment = Comment.objects.get(id=comment_id)
+        comment_text = comment.text[:50] + '...' if len(comment.text) > 50 else comment.text
+        comment.delete()
+        
+        return Response({
+            'message': f'Комментарий "{comment_text}" успешно удален'
+        })
+        
+    except Comment.DoesNotExist:
+        return Response({'error': 'Комментарий не найден'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Ошибка при удалении комментария: {str(e)}'}, status=500)
+
+# === УПРАВЛЕНИЕ НОВОСТЯМИ ===
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_news(request):
+    """
+    Получение списка новостей для управления
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    page = int(request.GET.get('page', 1))
+    limit = int(request.GET.get('limit', 20))
+    search = request.GET.get('search', '')
+    published = request.GET.get('published', '')
+    sort_field = request.GET.get('sort_field', 'created_at')
+    sort_direction = request.GET.get('sort_direction', 'desc')
+    
+    try:
+        news_query = News.objects.all()
+        
+        # Поиск
+        if search:
+            news_query = news_query.filter(
+                Q(title__icontains=search) | 
+                Q(content__icontains=search) |
+                Q(excerpt__icontains=search)
+            )
+        
+        # Фильтр по статусу публикации
+        if published == 'true':
+            news_query = news_query.filter(is_published=True)
+        elif published == 'false':
+            news_query = news_query.filter(is_published=False)
+        
+        # Сортировка
+        allowed_sort_fields = ['created_at', 'updated_at', 'title', 'is_published']
+        if sort_field in allowed_sort_fields:
+            if sort_direction == 'asc':
+                order_field = sort_field
+            else:
+                order_field = f'-{sort_field}'
+            news_query = news_query.order_by(order_field)
+        else:
+            news_query = news_query.order_by('-created_at')
+        
+        total = news_query.count()
+        news = news_query[(page-1)*limit:page*limit]
+        
+        news_data = []
+        for item in news:
+            news_data.append({
+                'id': item.id,
+                'title': item.title,
+                'excerpt': item.excerpt or (item.content[:200] + '...' if len(item.content) > 200 else item.content),
+                'is_published': item.is_published,
+                'created_at': item.created_at.isoformat(),
+                'updated_at': item.updated_at.isoformat(),
+                'banner': item.banner.url if item.banner else None,
+                'tags_count': item.tags.count()
+            })
+        
+        return Response({
+            'data': news_data,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total,
+                'pages': (total + limit - 1) // limit
+            }
+        })
+        
+    except Exception as e:
+        return Response({'error': f'Ошибка при получении новостей: {str(e)}'}, status=500)
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def dashboard_news_toggle_published(request, news_id):
+    """
+    Переключение статуса публикации новости
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        news = News.objects.get(id=news_id)
+        news.is_published = not news.is_published
+        news.save()
+        
+        return Response({
+            'message': f'Новость "{news.title}" {"опубликована" if news.is_published else "снята с публикации"}',
+            'is_published': news.is_published
+        })
+        
+    except News.DoesNotExist:
+        return Response({'error': 'Новость не найдена'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Ошибка при изменении статуса новости: {str(e)}'}, status=500)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def dashboard_news_delete(request, news_id):
+    """
+    Удаление новости
+    """
+    is_allowed, error = check_staff_permission(request.user)
+    if not is_allowed:
+        return Response(error, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        news = News.objects.get(id=news_id)
+        news_title = news.title
+        news.delete()
+        
+        return Response({
+            'message': f'Новость "{news_title}" успешно удалена'
+        })
+        
+    except News.DoesNotExist:
+        return Response({'error': 'Новость не найдена'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Ошибка при удалении новости: {str(e)}'}, status=500)
