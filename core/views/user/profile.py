@@ -32,8 +32,9 @@ class UserProfileView(APIView):
         bookmarks = Bookmark.objects.filter(user=user)
         bookmarks_by_status = {'watching': [], 'planned': [], 'completed': []}
         for bm in bookmarks:
-            bookmarks_by_status[bm.status].append(BookmarkSerializer(bm).data)        
-            history = History.objects.filter(user=user).order_by('-watched_at')[:30]
+            bookmarks_by_status[bm.status].append(BookmarkSerializer(bm).data)
+        
+        history = History.objects.filter(user=user).order_by('-watched_at')[:30]
         history_data = HistorySerializer(history, many=True).data
         return Response({
             'id': user.id,
