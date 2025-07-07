@@ -2,10 +2,13 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import *
 from .views.reports import report_admin_view
+from .dashboard_urls import dashboard_urlpatterns
 
 urlpatterns = [
     # --- Аутентификация ---
-    path('login/', CustomTokenObtainPairView.as_view(), name='login'),
+    path('auth/login/', CustomTokenObtainPairView.as_view(), name='login'),
+    path('auth/me/', UserProfileView.as_view(), name='current_user'),
+    path('login/', CustomTokenObtainPairView.as_view(), name='login_legacy'),  # Обратная совместимость
     path('send_email_code/', SendEmailCodeView.as_view(), name='send_email_code'),
     path('register_with_code/', RegisterWithCodeView.as_view(), name='register_with_code'),
 
@@ -42,10 +45,11 @@ urlpatterns = [
     
     # --- Редиректы после платежа (GET запросы от RoboKassa) ---
     path('shop/payment-success-redirect/', PaymentSuccessRedirectView.as_view(), name='shop_payment_success_redirect'),
-    path('shop/payment-fail-redirect/', PaymentFailRedirectView.as_view(), name='shop_payment_fail_redirect'),
-
-    # --- Генерация изображений для аниме ---
+    path('shop/payment-fail-redirect/', PaymentFailRedirectView.as_view(), name='shop_payment_fail_redirect'),    # --- Генерация изображений для аниме ---
     path('generate/<int:idanime>/', AnimeImageGenerateView.as_view(), name='anime_image_generate'),
     path('watchroom/create/', WatchRoomCreateView.as_view(), name='watchroom_create'),
     path('watchroom/public/', PublicWatchRoomsView.as_view(), name='public_watch_rooms'),
 ]
+
+# Добавляем dashboard URLs
+urlpatterns += dashboard_urlpatterns

@@ -30,9 +30,10 @@ DEBUG = False
 
 # Для production-режима обязательно укажите домены/IP, с которых разрешён доступ.
 # Например: ['127.0.0.1', 'localhost', 'yourdomain.com']
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'anirase.ru',"https://anirase.ru", "192.168.0.100"]
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'anirase.ru',"https://anirase.ru", "192.168.0.100", "bd.anirase.ru"]
 CSRF_TRUSTED_ORIGINS = [
     "https://anirase.ru",
+    "https://bd.anirase.ru"
     "https://auth.robokassa.ru",
 ]
 
@@ -271,7 +272,7 @@ JAZZMIN_SETTINGS = {
         "core.Room": "fas fa-users",
         "core.RoomSession": "fas fa-user-clock",
     },
-    "site_logo": "AniRase.webp",
+    # "site_logo": "AniRase.webp",    
     "default_icon_parents": "fas fa-chevron-circle-right",
     "default_icon_children": "fas fa-circle",
     "show_sidebar": True,

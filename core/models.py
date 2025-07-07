@@ -404,3 +404,104 @@ class ShopSettings(models.Model):
             'maintenance_message': 'Оплата временно отключена. Попробуйте позже.'
         })
         return settings
+
+# Система логирования действий администраторов
+class AdminActionLog(models.Model):
+    ACTION_TYPES = [
+        ('create', 'Создание'),
+        ('update', 'Изменение'),
+        ('delete', 'Удаление'),
+        ('bulk_delete', 'Массовое удаление'),
+        ('status_change', 'Изменение статуса'),
+        ('permission_change', 'Изменение прав'),
+        ('system_action', 'Системное действие'),
+    ]
+
+    ENTITY_TYPES = [
+        ('user', 'Пользователь'),
+        ('news', 'Новость'),
+        ('comment', 'Комментарий'),
+        ('room', 'Комната'),
+        ('product', 'Товар'),
+        ('category', 'Категория'),
+        ('order', 'Заказ'),
+        ('settings', 'Настройки'),
+    ]
+
+    # Основная информация
+    admin_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='admin_actions')
+    action_type = models.CharField(max_length=20, choices=ACTION_TYPES)
+    entity_type = models.CharField(max_length=20, choices=ENTITY_TYPES)
+    entity_id = models.CharField(max_length=255)  # ID объекта (может быть строкой)
+    entity_name = models.CharField(max_length=500)  # Название/описание объекта
+    
+    # Данные для отката
+    old_data = models.JSONField(default=dict, blank=True)  # Данные до изменения
+    new_data = models.JSONField(default=dict, blank=True)  # Данные после изменения
+    
+    # Метаданные
+    description = models.TextField(blank=True)  # Описание действия
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    
+    # Статус отката
+    is_reverted = models.BooleanField(default=False)
+    reverted_at = models.DateTimeField(null=True, blank=True)
+    reverted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reverted_actions')
+    revert_reason = models.TextField(blank=True)
+    
+    # Время действия
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Лог действий администратора"
+        verbose_name_plural = "Логи действий администраторов"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['admin_user', '-created_at']),
+            models.Index(fields=['entity_type', 'entity_id']),
+            models.Index(fields=['action_type', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.admin_user.username} - {self.get_action_type_display()} {self.get_entity_type_display()} ({self.entity_name})"
+
+    def can_be_reverted(self):
+        """Проверяет, можно ли откатить это действие"""
+        if self.is_reverted:
+            return False
+        
+        # Только некоторые типы действий можно откатить
+        revertible_actions = ['create', 'update', 'delete', 'status_change']
+        return self.action_type in revertible_actions
+
+    def get_revert_description(self):
+        """Получает описание того, что произойдет при откате"""
+        if not self.can_be_reverted():
+            return "Действие нельзя откатить"
+        
+        action_descriptions = {
+            'create': f"Удалить созданный объект '{self.entity_name}'",
+            'update': f"Восстановить предыдущие значения для '{self.entity_name}'",
+            'delete': f"Восстановить удаленный объект '{self.entity_name}'",
+            'status_change': f"Восстановить предыдущий статус для '{self.entity_name}'"
+        }
+        
+        return action_descriptions.get(self.action_type, "Откатить действие")
+
+class AdminActionRevert(models.Model):
+    """Модель для отслеживания откатов действий"""
+    original_action = models.OneToOneField(AdminActionLog, on_delete=models.CASCADE, related_name='revert_record')
+    reverted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='performed_reverts')
+    revert_reason = models.TextField()
+    revert_data = models.JSONField(default=dict)  # Данные, использованные для отката
+    success = models.BooleanField(default=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Откат действия администратора"
+        verbose_name_plural = "Откаты действий администраторов"
+
+    def __str__(self):
+        return f"Откат: {self.original_action} by {self.reverted_by.username}"
