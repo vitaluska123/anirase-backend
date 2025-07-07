@@ -30,9 +30,10 @@ DEBUG = False
 
 # Для production-режима обязательно укажите домены/IP, с которых разрешён доступ.
 # Например: ['127.0.0.1', 'localhost', 'yourdomain.com']
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'anirase.ru',"https://anirase.ru", "192.168.0.100"]
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'anirase.ru',"https://anirase.ru", "192.168.0.100", "bd.anirase.ru"]
 CSRF_TRUSTED_ORIGINS = [
     "https://anirase.ru",
+    "https://bd.anirase.ru"
     "https://auth.robokassa.ru",
 ]
 
