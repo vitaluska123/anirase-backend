@@ -103,7 +103,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'anirase',
         'USER': 'anirase',
-        'PASSWORD': 'nuf38hdfg34',
+        'PASSWORD': '',
         'HOST': '80.82.39.95',
         'PORT': '5432',
     }
@@ -279,14 +279,6 @@ JAZZMIN_SETTINGS = {
     "navigation_expanded": True,
     "language_chooser": False,
     "related_modal_active": True,
-    "topmenu_links": [
-        {"name": "Frontend", "url": "https://anirase.ru", "new_window": False},
-        {"name": "Github", "url": "https://github.com/vitaluska123/AniRase", "new_window": True},
-        {"name": "Cloudflare", "url": "https://dash.cloudflare.com/882764ed5a13018664590b1a3d095256/anirase.ru/dns/records", "new_window": True},
-        {"name": "AnyPay", "url": "https://anypay.io/panel/project/16480", "new_window": True},
-        {"name": "Отчёты и графики", "url": "/admin/core/userprofile/reports-dashboard/", "new_window": False},
-        {"name": "Почта (ящики)", "url": "/admin/core/emailaccount/reports-mail-dashboard/", "new_window": False}
-    ],
     # "show_ui_builder": True,
 }
 JAZZMIN_UI_TWEAKS = {
@@ -321,15 +313,15 @@ JAZZMIN_UI_TWEAKS = {
     }
 }
 
-ANYPAY_API_KEY = 'bSR2oIQiT5XSUExYlLklT8cIX9ZqQ4oVaFQfT7Q'
-ANYPAY_SHOP_ID = '16480'
+ANYPAY_API_KEY = ''
+ANYPAY_SHOP_ID = ''
 SITE_URL = 'https://anirase.ru'  # или http://127.0.0.1:8034 для локальной разработки
 
-YANDEX_PARTNER_API_KEY = 'y0__xD238a_BRjnjC0g3rLDsBOyZlmMfx8mxWOuRIKQnoqSW_854A'
+YANDEX_PARTNER_API_KEY = ''
 
 # RoboKassa настройки
-ROBOKASSA_LOGIN = 'anirase'  # Ваш логин в RoboKassa
-ROBOKASSA_PASSWORD1 = 'OFtqmt35LlBj7zJWuM33'  # Пароль #1 (для тестового режима)
-ROBOKASSA_PASSWORD2 = 'WQ4hCiT4PVV696prJuIs'  # Пароль #2 (для тестового режима)
+ROBOKASSA_LOGIN = ''  # Ваш логин в RoboKassa
+ROBOKASSA_PASSWORD1 = ''  # Пароль #1 (для тестового режима)
+ROBOKASSA_PASSWORD2 = ''  # Пароль #2 (для тестового режима)
 ROBOKASSA_TEST_MODE = True  # True для тестового режима
 ROBOKASSA_HASH_ALGO = 'sha256'  # Алгоритм хеширования: md5, sha1, sha256, sha384, sha512
